@@ -16,17 +16,15 @@ class CreateBookingSerializer(serializers.Serializer):
     check_out = serializers.CharField()
     adults = serializers.IntegerField(min_value=1)
     children = serializers.IntegerField(min_value=0, default=0)
-    # یک لیست تو در تو از میهمانان
     guests = GuestSerializer(many=True)
+    # فیلد جدید برای تعیین نوع پرداخت
+    payment_method = serializers.ChoiceField(choices=['online', 'credit'], default='online')
 
     def validate(self, data):
-        # اعتبارسنجی اینکه تعداد میهمانان با تعداد بزرگسالان و کودکان مطابقت دارد
         if len(data['guests']) != (data['adults'] + data['children']):
             raise serializers.ValidationError("تعداد میهمانان باید با مجموع تعداد بزرگسالان و کودکان برابر باشد.")
         return data
 # reservations/serializers.py
-
-# ... (import های قبلی) ...
 
 class BookingListSerializer(serializers.ModelSerializer):
     hotel_name = serializers.CharField(source='room_type.hotel.name', read_only=True)
