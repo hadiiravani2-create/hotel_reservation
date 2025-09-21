@@ -4,7 +4,66 @@ from django.contrib.auth.models import AbstractUser
 from django.db import models
 
 class CustomUser(AbstractUser):
-    # در حال حاضر، ما فیلد اضافه‌ای به مدل کاربر استاندارد جنگو اضافه نمی‌کنیم.
-    # اما با ساختن این مدل، دست خود را برای آینده (مثلاً برای افزودن شماره موبایل)
-    # کاملاً باز گذاشته‌ایم.
-    pass
+    agency = models.ForeignKey('agencies.Agency', on_delete=models.SET_NULL, null=True, blank=True, related_name="users", verbose_name="آژانس")
+
+class SiteSettings(models.Model):
+    # بخش اطلاعات اصلی سایت
+    site_name = models.CharField(max_length=100, default="نام سایت", verbose_name="نام وب‌سایت")
+    slogan = models.CharField(max_length=255, blank=True, null=True, verbose_name="شعار یا توضیح کوتاه سایت")
+    logo = models.ImageField(upload_to='site_settings/', blank=True, null=True, verbose_name="لوگو")
+    favicon = models.ImageField(upload_to='site_settings/', blank=True, null=True, verbose_name="فایوآیکون (Favicon)")
+    # فیلدهای جدید برای رنگ‌بندی
+    primary_color = models.CharField(max_length=7, default="#007BFF", verbose_name="رنگ اصلی")
+    secondary_color = models.CharField(max_length=7, default="#6c757d", verbose_name="رنگ ثانویه")
+    text_color = models.CharField(max_length=7, default="#333333", verbose_name="رنگ متن")
+    # بخش اطلاعات تماس
+    phone_number = models.CharField(max_length=20, blank=True, null=True, verbose_name="شماره تلفن")
+    email = models.EmailField(blank=True, null=True, verbose_name="آدرس ایمیل")
+    address = models.TextField(blank=True, null=True, verbose_name="آدرس فیزیکی")
+    
+    # بخش شبکه‌های اجتماعی
+    instagram_url = models.URLField(blank=True, null=True, verbose_name="لینک اینستاگرام")
+    telegram_url = models.URLField(blank=True, null=True, verbose_name="لینک تلگرام")
+    whatsapp_url = models.URLField(blank=True, null=True, verbose_name="لینک واتس‌اپ")
+
+    # بخش فوتر و کپی‌رایت
+    footer_text = models.TextField(blank=True, null=True, verbose_name="متن کوتاه درباره ما در فوتر")
+    enamad_code = models.TextField(blank=True, null=True, verbose_name="کد HTML اینماد")
+    copyright_text = models.CharField(max_length=255, blank=True, null=True, verbose_name="متن کپی‌رایت")
+
+    # نکته: برای منوها، در آینده یک مدل جداگانه و پیشرفته‌تر خواهیم ساخت.
+
+    class Meta:
+        verbose_name = "تنظیمات سایت"
+        verbose_name_plural = "تنظیمات سایت"
+
+    def __str__(self):
+        return self.site_name
+        
+# مدل‌های جدید برای مدیریت منو
+class Menu(models.Model):
+    name = models.CharField(max_length=50, unique=True, verbose_name="نام منو")
+    slug = models.SlugField(unique=True, help_text="برای فراخوانی در کد استفاده می‌شود (مثلا: main-menu)")
+
+    class Meta:
+        verbose_name = "منو"
+        verbose_name_plural = "منوها"
+
+    def __str__(self):
+        return self.name
+
+class MenuItem(models.Model):
+    menu = models.ForeignKey(Menu, on_delete=models.CASCADE, related_name="items", verbose_name="منوی اصلی")
+    title = models.CharField(max_length=100, verbose_name="عنوان لینک")
+    url = models.CharField(max_length=255, verbose_name="آدرس URL")
+    # برای ایجاد منوهای تو در تو
+    parent = models.ForeignKey('self', on_delete=models.CASCADE, null=True, blank=True, related_name="children", verbose_name="والد")
+    order = models.PositiveIntegerField(default=0, verbose_name="ترتیب نمایش")
+
+    class Meta:
+        verbose_name = "آیتم منو"
+        verbose_name_plural = "آیتم‌های منو"
+        ordering = ['order']
+
+    def __str__(self):
+        return self.title

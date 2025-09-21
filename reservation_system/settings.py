@@ -44,8 +44,9 @@ INSTALLED_APPS = [
     'core.apps.CoreConfig',
     'hotels.apps.HotelsConfig',
     'pricing.apps.PricingConfig',
-    #'agencies.apps.AgenciesConfig',
-    #'reservations.apps.ReservationsConfig',
+    'agencies.apps.AgenciesConfig',
+    'reservations.apps.ReservationsConfig',
+    'rest_framework.authtoken',
 ]
 
 MIDDLEWARE = [
