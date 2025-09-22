@@ -26,8 +26,8 @@ SECRET_KEY = 'django-insecure-)x$4f&e7e-%u)cid2&v!i)q$ulxoyg=kxc)=m_n^789mtfhy7^
 # SECURITY WARNING: don't run with debug turned on in production!
 DEBUG = True
 
-ALLOWED_HOSTS = []
 
+ALLOWED_HOSTS = ['192.168.10.131','2.180.44.137','demo.mirisafar.com']
 
 # Application definition
 
@@ -48,6 +48,7 @@ INSTALLED_APPS = [
     'agencies.apps.AgenciesConfig',
     'reservations.apps.ReservationsConfig',
     'rest_framework.authtoken',
+    'notifications.apps.NotificationsConfig'
 ]
 
 MIDDLEWARE = [
@@ -143,5 +144,12 @@ JALALI_DATE_DEFAULTS = {
     },
     'StaticFiles': False,
 }
+
+# CELERY SETTINGS
+CELERY_BROKER_URL = 'redis://localhost:6379/0'
+CELERY_RESULT_BACKEND = 'redis://localhost:6379/0'
+CELERY_ACCEPT_CONTENT = ['json']
+CELERY_TASK_SERIALIZER = 'json'
+CELERY_RESULT_SERIALIZER = 'json'
 
 STATICFILES_DIRS = [BASE_DIR / 'static']

@@ -34,7 +34,7 @@ class Booking(models.Model):
 
     total_price = models.DecimalField(max_digits=20, decimal_places=0, verbose_name="قیمت نهایی")
     status = models.CharField(max_length=20, choices=STATUS_CHOICES, default='pending', verbose_name="وضعیت")
-
+    notification_sent = models.BooleanField(default=False, verbose_name="اطلاع‌رسانی ارسال شده؟")
     created_at = models.DateTimeField(auto_now_add=True, verbose_name="زمان ایجاد")
     updated_at = models.DateTimeField(auto_now=True, verbose_name="آخرین ویرایش")
 

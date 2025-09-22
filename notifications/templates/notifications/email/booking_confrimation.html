@@ -1,0 +1,23 @@
+<!DOCTYPE html>
+<html lang="fa" dir="rtl">
+<head>
+    <meta charset="UTF-8">
+    <title>تایید رزرو</title>
+</head>
+<body>
+    <h1>سلام {{ full_name }} عزیز،</h1>
+    <p>رزرو شما با کد <strong>{{ booking_code }}</strong> با موفقیت تایید شد.</p>
+
+    <h2>جزئیات رزرو:</h2>
+    <ul>
+        <li><strong>هتل:</strong> {{ hotel_name }}</li>
+        <li><strong>اتاق:</strong> {{ room_name }}</li>
+        <li><strong>تاریخ ورود:</strong> {{ check_in }}</li>
+        <li><strong>تاریخ خروج:</strong> {{ check_out }}</li>
+        <li><strong>مبلغ کل:</strong> {{ total_price }} تومان</li>
+    </ul>
+
+    <p>با تشکر از انتخاب شما!</p>
+    <p><strong>{{ site_name }}</strong></p>
+</body>
+</html>
