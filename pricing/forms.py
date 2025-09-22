@@ -3,7 +3,7 @@
 from django import forms
 from django_jalali.forms import jDateField
 from .models import Availability, Price
-from hotels.models import Hotel, RoomType
+from hotels.models import Hotel, RoomType, BoardType
 from jalali_date.widgets import AdminJalaliDateWidget
 
 class AvailabilityRangeForm(forms.ModelForm):
