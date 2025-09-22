@@ -41,8 +41,8 @@ class AvailabilityAdmin(admin.ModelAdmin):
 class PriceAdmin(admin.ModelAdmin):
     form = PriceRangeForm
     # فیلد 'child_price' را به این لیست اضافه می‌کنیم
-    list_display = ('get_hotel_name', 'room_type', 'date', 'price_per_night', 'extra_person_price', 'child_price')
-    list_filter = ('room_type__hotel', 'date')
+    list_display = ('get_hotel_name', 'room_type', 'board_type', 'date', 'price_per_night') # board_type اضافه شد
+    list_filter = ('room_type__hotel', 'date', 'board_type') 
 
     @admin.display(description='هتل', ordering='room_type__hotel')
     def get_hotel_name(self, obj):
@@ -60,12 +60,13 @@ class PriceAdmin(admin.ModelAdmin):
             price_per_night = form.cleaned_data['price_per_night']
             extra_person_price = form.cleaned_data['extra_person_price']
             child_price = form.cleaned_data['child_price']
-
+            board_type = form.cleaned_data['board_type'] 
             current_date = start_date
             while current_date <= end_date:
                 Price.objects.update_or_create(
                     room_type=room_type,
                     date=current_date,
+                    board_type=board_type,
                     defaults={
                         'price_per_night': price_per_night,
                         'extra_person_price': extra_person_price,

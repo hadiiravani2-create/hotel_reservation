@@ -39,11 +39,11 @@ class PriceRangeForm(forms.ModelForm):
     hotel = forms.ModelChoiceField(queryset=Hotel.objects.all(), label="هتل", required=True)
     start_date = jDateField(label="تاریخ شروع", widget=AdminJalaliDateWidget)
     end_date = jDateField(label="تاریخ پایان", widget=AdminJalaliDateWidget)
-
+    board_type = forms.ModelChoiceField(queryset=BoardType.objects.all(), label="نوع سرویس")
     class Meta:
         model = Price
         fields = [
-            'hotel', 'room_type', 'start_date', 'end_date',
+            'hotel', 'room_type', 'board_type', 'start_date', 'end_date', 
             'price_per_night', 'extra_person_price', 'child_price'
         ]
 

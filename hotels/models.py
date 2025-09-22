@@ -63,3 +63,15 @@ class RoomType(models.Model):
 
     def __str__(self):
         return f"{self.name} - {self.hotel.name}"
+
+class BoardType(models.Model):
+    name = models.CharField(max_length=100, unique=True, verbose_name="نام سرویس")
+    code = models.CharField(max_length=10, unique=True, verbose_name="کد اختصاری (مثلا: BB, FB)")
+    description = models.TextField(blank=True, null=True, verbose_name="توضیحات")
+
+    class Meta:
+        verbose_name = "نوع سرویس"
+        verbose_name_plural = "انواع سرویس"
+
+    def __str__(self):
+        return self.name
