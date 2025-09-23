@@ -12,8 +12,8 @@ class GuestInline(admin.TabularInline):
 @admin.register(Booking)
 class BookingAdmin(admin.ModelAdmin):
     form = BookingForm
-    list_display = ('booking_code', 'user', 'room_type', 'check_in', 'check_out', 'status', 'total_price')
-    list_filter = ('status', 'check_in', 'room_type__hotel')
+    list_display = ('booking_code', 'user', 'room_type', 'board_type', 'check_in', 'check_out', 'status', 'total_price')
+    list_filter = ('status', 'check_in', 'room_type__hotel', 'board_type') # به فیلترها هم اضافه می‌کنیم
     search_fields = ('booking_code', 'user__username', 'guests__last_name')
     inlines = [GuestInline]
     readonly_fields = ('booking_code',)

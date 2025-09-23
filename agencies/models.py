@@ -34,7 +34,7 @@ class AgencyTransaction(models.Model):
     booking = models.ForeignKey('reservations.Booking', on_delete=models.SET_NULL, null=True, blank=True, verbose_name="رزرو مرتبط")
     amount = models.DecimalField(max_digits=20, decimal_places=0, verbose_name="مبلغ")
     transaction_type = models.CharField(max_length=20, choices=TRANSACTION_TYPES, verbose_name="نوع تراکنش")
-
+    tracking_code = models.CharField(max_length=100, blank=True, null=True, verbose_name="شماره پیگیری/تراکنش")
     # به فیلد تاریخ، یک مقدار پیش‌فرض (تاریخ امروز) اضافه می‌کنیم
     transaction_date = jmodels.jDateField(verbose_name="تاریخ تراکنش", default=jdate.today)
 

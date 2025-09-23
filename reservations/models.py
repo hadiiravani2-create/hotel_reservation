@@ -4,7 +4,7 @@ import random
 import time
 from django.db import models
 from django.conf import settings
-from hotels.models import RoomType
+from hotels.models import RoomType, BoardType
 from django_jalali.db import models as jmodels
 from django.core.exceptions import ValidationError
 import re
@@ -25,7 +25,7 @@ class Booking(models.Model):
     booking_code = models.CharField(max_length=8, default=generate_numeric_booking_code, unique=True, verbose_name="کد رزرو")
     user = models.ForeignKey(settings.AUTH_USER_MODEL, on_delete=models.SET_NULL, null=True, blank=True, related_name="bookings", verbose_name="کاربر رزرو کننده")
     room_type = models.ForeignKey(RoomType, on_delete=models.PROTECT, related_name="bookings", verbose_name="نوع اتاق")
-
+    board_type = models.ForeignKey(BoardType, on_delete=models.PROTECT, related_name="bookings", verbose_name="نوع سرویس")
     check_in = jmodels.jDateField(verbose_name="تاریخ ورود")
     check_out = jmodels.jDateField(verbose_name="تاریخ خروج")
 
