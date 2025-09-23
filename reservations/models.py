@@ -8,7 +8,7 @@ from hotels.models import RoomType, BoardType
 from django_jalali.db import models as jmodels
 from django.core.exceptions import ValidationError
 import re
-
+from agencies.models import Agency
 def generate_numeric_booking_code():
     # یک کد رزرو ۸ رقمی تصادفی بر اساس زمان فعلی ایجاد می‌کند
     timestamp_part = str(int(time.time()))[-5:] # ۵ رقم آخر زمان یونیکس
@@ -34,6 +34,7 @@ class Booking(models.Model):
 
     total_price = models.DecimalField(max_digits=20, decimal_places=0, verbose_name="قیمت نهایی")
     status = models.CharField(max_length=20, choices=STATUS_CHOICES, default='pending', verbose_name="وضعیت")
+    agency = models.ForeignKey(Agency, on_delete=models.SET_NULL, null=True, blank=True, related_name="bookings", verbose_name="رزرو برای آژانس")
     notification_sent = models.BooleanField(default=False, verbose_name="اطلاع‌رسانی ارسال شده؟")
     created_at = models.DateTimeField(auto_now_add=True, verbose_name="زمان ایجاد")
     updated_at = models.DateTimeField(auto_now=True, verbose_name="آخرین ویرایش")

@@ -14,6 +14,7 @@ class Agency(models.Model):
     credit_limit = models.DecimalField(max_digits=20, decimal_places=0, default=0, verbose_name="سقف اعتبار (تومان)")
     current_balance = models.DecimalField(max_digits=20, decimal_places=0, default=0, verbose_name="بدهی فعلی (تومان)")
     # فیلد جدید: درصد تخفیف پیش‌فرض
+    credit_blacklist_hotels = models.ManyToManyField(Hotel, blank=True, verbose_name="هتل‌های لیست سیاه اعتباری")
     default_discount_percentage = models.PositiveSmallIntegerField(default=0, help_text="در صورتی که قراردادی برای هتل یافت نشود، این تخفیف اعمال می‌شود", verbose_name="درصد تخفیف پیش‌فرض")
 
     class Meta:
@@ -66,7 +67,6 @@ class Contract(models.Model):
     end_date = jmodels.jDateField(verbose_name="تاریخ پایان قرارداد")
     contract_type = models.CharField(max_length=10, choices=CONTRACT_TYPES, verbose_name="نوع قرارداد")
     discount_percentage = models.PositiveSmallIntegerField(blank=True, null=True, help_text="فقط برای قراردادهای درصد تخفیف", verbose_name="درصد تخفیف")
-    credit_blacklist_hotels = models.ManyToManyField(Hotel, blank=True, related_name="blacklisted_contracts", verbose_name="هتل‌های لیست سیاه اعتباری")
 
     class Meta:
         verbose_name = "قرارداد"

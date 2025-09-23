@@ -13,17 +13,18 @@ class BookingForm(forms.ModelForm):
         model = Booking
         fields = '__all__'
 
-    def clean(self):
-        cleaned_data = super().clean()
-        room_type = cleaned_data.get("room_type")
-        adults = cleaned_data.get("adults")
-        children = cleaned_data.get("children")
+# reservations/forms.py
+def clean(self):
+    cleaned_data = super().clean()
+    room_type = cleaned_data.get("room_type")
+    adults = cleaned_data.get("adults")
+    children = cleaned_data.get("children")
 
-        if room_type and adults and children is not None:
-            total_capacity = room_type.base_capacity + room_type.extra_capacity
-            if adults > total_capacity:
-                raise ValidationError(f"تعداد بزرگسالان نمی‌تواند بیشتر از ظرفیت کل اتاق ({total_capacity} نفر) باشد.")
-            if children > room_type.child_capacity:
-                 raise ValidationError(f"تعداد کودکان نمی‌تواند بیشتر از ظرفیت کودک اتاق ({room_type.child_capacity} نفر) باشد.")
+    if room_type and adults is not None and children is not None:
+        total_adult_capacity = room_type.base_capacity + room_type.extra_capacity
+        if adults > total_adult_capacity:
+            raise ValidationError(f"تعداد بزرگسالان نمی‌تواند بیشتر از ظرفیت کل ({total_adult_capacity} نفر) باشد.")
+        if children > room_type.child_capacity:
+             raise ValidationError(f"تعداد کودکان نمی‌تواند بیشتر از ظرفیت کودک اتاق ({room_type.child_capacity} نفر) باشد.")
 
-        return cleaned_data
+    return cleaned_data
