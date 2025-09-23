@@ -16,7 +16,7 @@ class AgencyAdmin(admin.ModelAdmin):
     search_fields = ('name', 'contact_person')
     readonly_fields = ('current_balance',)
     inlines = [AgencyTransactionInline]
-
+    filter_horizontal = ('credit_blacklist_hotels',)
 @admin.register(AgencyTransaction)
 class AgencyTransactionAdmin(admin.ModelAdmin):
     form = AgencyTransactionForm
@@ -33,5 +33,4 @@ class ContractAdmin(admin.ModelAdmin):
     form = ContractForm
     list_display = ('title', 'agency', 'hotel', 'start_date', 'end_date', 'contract_type')
     list_filter = ('agency', 'hotel', 'contract_type')
-    filter_horizontal = ('credit_blacklist_hotels',)
     inlines = [StaticRateInline]

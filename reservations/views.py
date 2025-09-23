@@ -49,7 +49,7 @@ class CreateBookingAPIView(APIView):
             agency = user.agency
 
             active_contract = Contract.objects.filter(agency=agency, hotel=room_type.hotel, start_date__lte=check_in, end_date__gte=check_out).first()
-            if active_contract and active_contract.credit_blacklist_hotels.filter(id=room_type.hotel.id).exists():
+            if active_contract and agency.credit_blacklist_hotels.filter(id=room_type.hotel.id).exists():
                 return Response({"error": "استفاده از اعتبار برای این هتل مجاز نیست."}, status=status.HTTP_403_FORBIDDEN)
 
             if (agency.current_balance + final_price) > agency.credit_limit:
