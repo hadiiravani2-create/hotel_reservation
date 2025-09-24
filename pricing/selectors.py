@@ -1,107 +1,155 @@
 # pricing/selectors.py
 
 from datetime import timedelta
-from django.utils import timezone
-from hotels.models import Hotel, RoomType
+from django.db.models import Q
+from hotels.models import RoomType, BoardType
 from agencies.models import Contract, StaticRate
 from .models import Availability, Price
 from django.shortcuts import get_object_or_404
-from jdatetime import date as jdate
 
-def _get_daily_price_for_user(room_type, date, user):
-    """
-    یک تابع کمکی برای پیدا کردن قیمت یک اتاق در یک روز خاص برای یک کاربر خاص.
-    این تابع منطق قراردادها را بررسی می‌کند.
-    """
-    # حالت پیش‌فرض: قیمت عمومی
-    daily_price_obj = Price.objects.filter(room_type=room_type, date=date).first()
-    if daily_price_obj:
-        price_per_night = daily_price_obj.price_per_night
-        extra_person_price = daily_price_obj.extra_person_price
-        child_price = daily_price_obj.child_price
-    else:
-        price_per_night = room_type.price_per_night
-        extra_person_price = room_type.extra_person_price
-        child_price = room_type.child_price
 
-    # اگر کاربر احراز هویت نشده یا عضو آژانس نباشد، همین قیمت عمومی را برمی‌گردانیم
+def _get_daily_price_for_user(room_type, board_type, date, user):
+    """
+    تابع کمکی نهایی برای پیدا کردن قیمت یک اتاق با یک سرویس خاص در یک روز خاص برای یک کاربر خاص.
+    این تابع قوانین اولویت‌بندی قراردادها را پیاده‌سازی می‌کند.
+    """
+    # ۱. قیمت عمومی را به عنوان قیمت پایه در نظر می‌گیریم
+    price_obj = Price.objects.filter(
+        room_type=room_type, 
+        board_type=board_type, 
+        date=date
+    ).first()
+    if not price_obj:
+        return None 
+    
+    price_info = {
+        'price_per_night': price_obj.price_per_night,
+        'extra_person_price': price_obj.extra_person_price,
+        'child_price': price_obj.child_price
+    }
+
+    # اگر کاربر احراز هویت نشده یا عضو آژانس نباشد، قیمت عمومی را برمی‌گردانیم
     if not user or not user.is_authenticated or not hasattr(user, 'agency') or not user.agency:
-        return price_per_night, extra_person_price, child_price
+        return price_info
 
-    # اگر کاربر عضو آژانس بود، به دنبال قرارداد می‌گردیم
     agency = user.agency
+    
+    # ۲. بررسی قراردادها با اولویت‌بندی
+    # اولویت ۱: قرارداد نرخ ثابت برای این هتل خاص
     contract = Contract.objects.filter(
-        agency=agency,
-        hotel=room_type.hotel,
-        start_date__lte=date,
+        agency=agency, 
+        hotel=room_type.hotel, 
+        contract_type='static',
+        start_date__lte=date, 
         end_date__gte=date
     ).first()
-
     if contract:
-        if contract.contract_type == 'static':
-            static_rate = StaticRate.objects.filter(contract=contract, room_type=room_type).first()
-            if static_rate:
-                # اگر نرخ ثابت در قرارداد وجود داشت، آن را برمی‌گردانیم
-                return static_rate.price_per_night, static_rate.extra_person_price, static_rate.child_price
+        static_rate = StaticRate.objects.filter(
+            contract=contract, 
+            room_type=room_type
+        ).first()
+        if static_rate:
+            price_info.update({
+                'price_per_night': static_rate.price_per_night,
+                'extra_person_price': static_rate.extra_person_price,
+                'child_price': static_rate.child_price
+            })
+            return price_info
 
-        elif contract.contract_type == 'dynamic' and contract.discount_percentage:
-            # اگر قرارداد تخفیف درصدی بود، تخفیف را اعمال می‌کنیم
-            discount = contract.discount_percentage / 100
-            price_per_night -= (price_per_night * discount)
-            extra_person_price -= (extra_person_price * discount)
-            child_price -= (child_price * discount)
-            return price_per_night, extra_person_price, child_price
+    # اولویت ۲: قرارداد درصد تخفیف برای این هتل خاص
+    contract = Contract.objects.filter(
+        agency=agency, 
+        hotel=room_type.hotel, 
+        contract_type='dynamic',
+        start_date__lte=date, 
+        end_date__gte=date
+    ).first()
+    if contract and contract.discount_percentage:
+        discount = contract.discount_percentage / 100
+        price_info['price_per_night'] *= (1 - discount)
+        # می‌توان تخفیف را برای نفر اضافه و کودک هم اعمال کرد
+        return price_info
 
-    # اگر قراردادی برای هتل خاص یافت نشد، تخفیف پیش‌فرض آژانس را اعمال می‌کنیم
+    # اولویت ۳: تخفیف پیش‌فرض آژانس
     if agency.default_discount_percentage > 0:
         discount = agency.default_discount_percentage / 100
-        price_per_night -= (price_per_night * discount)
-        # ... (می‌توان تخفیف را برای نفر اضافه و کودک هم اعمال کرد)
+        price_info['price_per_night'] *= (1 - discount)
+        return price_info
 
-    return price_per_night, extra_person_price, child_price
+    return price_info
 
 
 def find_available_rooms(city_id: int, check_in_date, check_out_date, adults: int, children: int, user):
+    """
+    موتور جستجوی نهایی که انواع سرویس‌ها و قیمت‌های مختلف را برمی‌گرداند.
+    """
     duration = (check_out_date - check_in_date).days
     if duration <= 0:
         return []
-    date_range = [check_in_date + timedelta(days=i) for i in range(duration)]
 
+    date_range = [check_in_date + timedelta(days=i) for i in range(duration)]
+    
     room_types = RoomType.objects.filter(
         hotel__city_id=city_id,
-        base_capacity__gte=adults
+        base_capacity__gte=adults,
+        child_capacity__gte=children
     ).select_related('hotel')
 
-    available_rooms_with_price = []
+    final_results = []
     for room in room_types:
-        is_available_for_all_nights = True
-        total_price = 0
+        is_available = Availability.objects.filter(
+            room_type=room, 
+            date__in=date_range, 
+            quantity__gt=0
+        ).count() == duration
+        if not is_available:
+            continue
 
-        availabilities = {a.date: a.quantity for a in Availability.objects.filter(room_type=room, date__in=date_range)}
+        available_prices = Price.objects.filter(
+            room_type=room, 
+            date__in=date_range
+        ).select_related('board_type')
+        
+        prices_by_board_type = {}
+        for price in available_prices:
+            board_type_id = price.board_type.id
+            if board_type_id not in prices_by_board_type:
+                prices_by_board_type[board_type_id] = {
+                    'board_type': price.board_type, 
+                    'total_price': 0, 
+                    'is_complete': True
+                }
+            
+            price_info = _get_daily_price_for_user(room, price.board_type, price.date, user)
+            if price_info:
+                prices_by_board_type[board_type_id]['total_price'] += price_info['price_per_night']
+            else:
+                prices_by_board_type[board_type_id]['is_complete'] = False
 
-        for single_date in date_range:
-            if availabilities.get(single_date, 0) < 1:
-                is_available_for_all_nights = False
-                break
+        board_options = [
+            {
+                'board_type_id': data['board_type'].id,
+                'board_type_name': data['board_type'].name,
+                'total_price': data['total_price']
+            }
+            for bt_id, data in prices_by_board_type.items() if data['is_complete']
+        ]
 
-            # از تابع کمکی جدید برای گرفتن قیمت استفاده می‌کنیم
-            price_per_night, _, _ = _get_daily_price_for_user(room, single_date, user)
-            total_price += price_per_night
-
-        if is_available_for_all_nights:
-            available_rooms_with_price.append({
+        if board_options:
+            final_results.append({
                 'room_id': room.id,
                 'room_name': room.name,
                 'hotel_id': room.hotel.id,
                 'hotel_name': room.hotel.name,
-                'total_price': total_price,
-                'price_per_night_avg': total_price / duration if duration > 0 else 0,
+                'board_options': board_options
             })
-    return available_rooms_with_price
+
+    return final_results
 
 
-def calculate_booking_price(room_type_id: int, check_in_date, check_out_date, adults: int, children: int, user):
+def calculate_booking_price(room_type_id: int, board_type_id: int, check_in_date, check_out_date, adults: int, children: int, user):
     room_type = get_object_or_404(RoomType, id=room_type_id)
+    board_type = get_object_or_404(BoardType, id=board_type_id)
     duration = (check_out_date - check_in_date).days
     date_range = [check_in_date + timedelta(days=i) for i in range(duration)]
 
@@ -109,23 +157,32 @@ def calculate_booking_price(room_type_id: int, check_in_date, check_out_date, ad
     total_base_price = 0
     total_extra_adults_cost = 0
     total_children_cost = 0
-
+    
     extra_adults = max(0, adults - room_type.base_capacity)
-
+    
     for single_date in date_range:
-        # از تابع کمکی جدید برای گرفتن قیمت هر شب استفاده می‌کنیم
-        base_price, extra_person_price, child_price = _get_daily_price_for_user(room_type, single_date, user)
+        price_info = _get_daily_price_for_user(room_type, board_type, single_date, user)
+        if not price_info:
+            return None
 
-        price_breakdown.append({"date": single_date.strftime("%Y-%m-%d"), "price": base_price})
+        base_price = price_info['price_per_night']
+        extra_person_price = price_info['extra_person_price']
+        child_price = price_info['child_price']
+        
+        price_breakdown.append({
+            "date": single_date.strftime("%Y-%m-%d"), 
+            "price": base_price
+        })
         total_base_price += base_price
         total_extra_adults_cost += extra_adults * extra_person_price
         total_children_cost += children * child_price
 
     total_price = total_base_price + total_extra_adults_cost + total_children_cost
-
+    
     return {
         "room_name": room_type.name,
         "hotel_name": room_type.hotel.name,
+        "board_type_name": board_type.name,
         "price_breakdown": price_breakdown,
         "extra_adults_cost": total_extra_adults_cost,
         "children_cost": total_children_cost,
