@@ -93,3 +93,20 @@ class Guest(models.Model):
 
     def __str__(self):
         return f"{self.first_name} {self.last_name}"
+
+class PaymentTransaction(models.Model):
+    """
+    مدل برای ثبت تراکنش‌های درگاه پرداخت
+    """
+    booking = models.ForeignKey(Booking, on_delete=models.CASCADE, related_name="payment_transactions", verbose_name="رزرو")
+    amount = models.DecimalField(max_digits=20, decimal_places=0, verbose_name="مبلغ")
+    transaction_id = models.CharField(max_length=255, blank=True, null=True, verbose_name="شناسه تراکنش")
+    is_successful = models.BooleanField(default=False, verbose_name="موفق بود؟")
+    created_at = models.DateTimeField(auto_now_add=True, verbose_name="زمان ایجاد")
+    
+    class Meta:
+        verbose_name = "تراکنش پرداخت"
+        verbose_name_plural = "تراکنش‌های پرداخت"
+
+    def __str__(self):
+        return f"تراکنش برای رزرو {self.booking.booking_code}"

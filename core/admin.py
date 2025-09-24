@@ -2,7 +2,7 @@
 
 from django.contrib import admin
 from django.contrib.auth.admin import UserAdmin as BaseUserAdmin
-from .models import CustomUser, SiteSettings, Menu, MenuItem, AgencyUserRole
+from .models import CustomUser, SiteSettings, Menu, MenuItem, AgencyUserRole, PaymentSettings
 
 @admin.register(CustomUser)
 class CustomUserAdmin(BaseUserAdmin):
@@ -31,3 +31,7 @@ class MenuItemAdmin(admin.ModelAdmin):
     list_filter = ('menu',)
     search_fields = ('title', 'url')
     list_editable = ('order',)
+
+@admin.register(PaymentSettings)
+class PaymentSettingsAdmin(admin.ModelAdmin):
+    list_display = ('bank_name', 'card_number', 'is_active')

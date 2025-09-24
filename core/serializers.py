@@ -92,3 +92,22 @@ class UserRegisterSerializer(serializers.ModelSerializer):
         user.set_password(password)
         user.save()
         return user
+
+class AgencySubUserSerializer(serializers.ModelSerializer):
+    password = serializers.CharField(write_only=True, required=True, validators=[validate_password])
+    agency_role = serializers.PrimaryKeyRelatedField(queryset=AgencyUserRole.objects.all())
+
+    class Meta:
+        model = CustomUser
+        fields = ['id', 'username', 'email', 'first_name', 'last_name', 'password', 'agency_role']
+        extra_kwargs = {
+            'password': {'write_only': True}
+        }
+    
+    def create(self, validated_data):
+        # اطمینان از اینکه فیلد agency توسط view تنظیم می‌شود و نه کاربر
+        password = validated_data.pop('password')
+        user = CustomUser.objects.create_user(**validated_data)
+        user.set_password(password)
+        user.save()
+        return user

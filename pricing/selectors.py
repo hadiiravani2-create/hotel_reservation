@@ -2,7 +2,7 @@
 
 from datetime import timedelta
 from django.db.models import Q
-from hotels.models import RoomType, BoardType
+from hotels.models import RoomType, BoardType, Hotel
 from agencies.models import Contract, StaticRate
 from .models import Availability, Price
 from django.shortcuts import get_object_or_404
@@ -80,7 +80,7 @@ def _get_daily_price_for_user(room_type, board_type, date, user):
     return price_info
 
 
-def find_available_rooms(city_id: int, check_in_date, check_out_date, adults: int, children: int, user):
+def find_available_rooms(city_id: int, check_in_date, check_out_date, adults: int, children: int, user, min_price=None, max_price=None, stars=None, amenities=None):
     """
     موتور جستجوی نهایی که انواع سرویس‌ها و قیمت‌های مختلف را برمی‌گرداند.
     """
@@ -92,8 +92,19 @@ def find_available_rooms(city_id: int, check_in_date, check_out_date, adults: in
     
     room_types = RoomType.objects.filter(
         hotel__city_id=city_id,
-        # فیلتر کردن بر اساس تعداد نفرات در مرحله جستجو حذف شد
-    ).select_related('hotel').prefetch_related('prices__board_type')
+    )
+
+    # فیلتر بر اساس ستاره هتل
+    if stars:
+        room_types = room_types.filter(hotel__stars__in=stars)
+
+    # فیلتر بر اساس امکانات
+    if amenities:
+        amenities = [int(a) for a in amenities.split(',')]
+        room_types = room_types.filter(Q(hotel__amenities__in=amenities) | Q(amenities__in=amenities)).distinct()
+
+    room_types = room_types.select_related('hotel').prefetch_related('prices__board_type')
+
 
     final_results = []
     for room in room_types:

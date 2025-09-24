@@ -1,15 +1,15 @@
 # reservations/urls.py
 
 from django.urls import path
-from . import views
+from .views import CreateBookingAPIView, MyBookingsAPIView, BookingRequestAPIView, InitiatePaymentAPIView, VerifyPaymentAPIView
+from rest_framework import routers
 
 app_name = 'reservations'
 
 urlpatterns = [
-    # آدرس برای ایجاد یک رزرو جدید
-    path('api/create/', views.CreateBookingAPIView.as_view(), name='create_booking_api'),
-    # آدرس برای مشاهده لیست رزروهای کاربر
-    path('api/my-bookings/', views.MyBookingsAPIView.as_view(), name='my_bookings_api'),
-    # آدرس جدید برای ارسال درخواست لغو یا ویرایش رزرو
-    path('api/booking-request/', views.BookingRequestAPIView.as_view(), name='booking_request_api'),
+    path('bookings/', CreateBookingAPIView.as_view(), name='create-booking'),
+    path('my-bookings/', MyBookingsAPIView.as_view(), name='my-bookings'),
+    path('booking-request/', BookingRequestAPIView.as_view(), name='booking-request'),
+    path('initiate-payment/', InitiatePaymentAPIView.as_view(), name='initiate-payment'),
+    path('verify-payment/', VerifyPaymentAPIView.as_view(), name='verify-payment'),
 ]

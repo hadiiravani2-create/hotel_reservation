@@ -54,8 +54,6 @@ class SiteSettings(models.Model):
     enamad_code = models.TextField(blank=True, null=True, verbose_name="کد HTML اینماد")
     copyright_text = models.CharField(max_length=255, blank=True, null=True, verbose_name="متن کپی‌رایت")
 
-    # نکته: برای منوها، در آینده یک مدل جداگانه و پیشرفته‌تر خواهیم ساخت.
-
     class Meta:
         verbose_name = "تنظیمات سایت"
         verbose_name_plural = "تنظیمات سایت"
@@ -90,3 +88,21 @@ class MenuItem(models.Model):
 
     def __str__(self):
         return self.title
+
+
+class PaymentSettings(models.Model):
+    """
+    مدل برای ذخیره تنظیمات پرداخت دستی
+    """
+    bank_name = models.CharField(max_length=100, verbose_name="نام بانک")
+    account_number = models.CharField(max_length=50, verbose_name="شماره حساب")
+    card_number = models.CharField(max_length=16, verbose_name="شماره کارت")
+    sheba_number = models.CharField(max_length=24, verbose_name="شماره شبا")
+    is_active = models.BooleanField(default=True, verbose_name="فعال است؟")
+
+    class Meta:
+        verbose_name = "تنظیمات پرداخت"
+        verbose_name_plural = "تنظیمات پرداخت"
+
+    def __str__(self):
+        return f"تنظیمات پرداخت {self.bank_name}"
