@@ -92,9 +92,7 @@ def find_available_rooms(city_id: int, check_in_date, check_out_date, adults: in
     
     room_types = RoomType.objects.filter(
         hotel__city_id=city_id,
-        # فیلتر کردن بر اساس ظرفیت کل اتاق (پایه + نفر اضافه)
-        base_capacity__gte=adults,
-        child_capacity__gte=children
+        # فیلتر کردن بر اساس تعداد نفرات در مرحله جستجو حذف شد
     ).select_related('hotel').prefetch_related('prices__board_type')
 
     final_results = []

@@ -2,7 +2,7 @@
 
 from django.db import models
 from django.conf import settings
-from hotels.models import Hotel, RoomType # RoomType را اضافه می‌کنیم
+from hotels.models import Hotel, RoomType
 from django_jalali.db import models as jmodels
 from jdatetime import date as jdate
 
@@ -13,7 +13,6 @@ class Agency(models.Model):
     phone_number = models.CharField(max_length=20, blank=True, null=True, verbose_name="شماره تماس")
     credit_limit = models.DecimalField(max_digits=20, decimal_places=0, default=0, verbose_name="سقف اعتبار (تومان)")
     current_balance = models.DecimalField(max_digits=20, decimal_places=0, default=0, verbose_name="بدهی فعلی (تومان)")
-    # فیلد جدید: درصد تخفیف پیش‌فرض
     credit_blacklist_hotels = models.ManyToManyField(Hotel, blank=True, verbose_name="هتل‌های لیست سیاه اعتباری")
     default_discount_percentage = models.PositiveSmallIntegerField(default=0, help_text="در صورتی که قراردادی برای هتل یافت نشود، این تخفیف اعمال می‌شود", verbose_name="درصد تخفیف پیش‌فرض")
 
@@ -36,9 +35,7 @@ class AgencyTransaction(models.Model):
     amount = models.DecimalField(max_digits=20, decimal_places=0, verbose_name="مبلغ")
     transaction_type = models.CharField(max_length=20, choices=TRANSACTION_TYPES, verbose_name="نوع تراکنش")
 
-    # به فیلد تاریخ، یک مقدار پیش‌فرض (تاریخ امروز) اضافه می‌کنیم
     transaction_date = jmodels.jDateField(verbose_name="تاریخ تراکنش", default=jdate.today)
-
     description = models.TextField(blank=True, null=True, verbose_name="توضیحات")
     tracking_code = models.CharField(max_length=100, blank=True, null=True, verbose_name="شماره پیگیری/تراکنش")
     created_at = models.DateTimeField(auto_now_add=True, verbose_name="زمان ثبت")
@@ -52,6 +49,15 @@ class AgencyTransaction(models.Model):
     def __str__(self):
         return f"{self.get_transaction_type_display()} برای {self.agency.name} به مبلغ {self.amount}"
 
+    @property
+    def signed_amount(self):
+        """
+        این متد مبلغ را با توجه به نوع تراکنش، با علامت صحیح برمی‌گرداند.
+        """
+        if self.transaction_type == 'payment':
+            return -self.amount
+        return self.amount
+
 
 class Contract(models.Model):
     CONTRACT_TYPES = (
@@ -60,7 +66,6 @@ class Contract(models.Model):
     )
     agency = models.ForeignKey(Agency, on_delete=models.CASCADE, related_name="contracts", verbose_name="آژانس")
     hotel = models.ForeignKey(Hotel, on_delete=models.CASCADE, related_name="contracts", verbose_name="هتل")
-    # فیلدهای جدید
     title = models.CharField(max_length=255, verbose_name="عنوان قرارداد")
     description = models.TextField(blank=True, null=True, verbose_name="توضیحات قرارداد")
 

@@ -4,7 +4,7 @@ import random
 import time
 from django.db import models
 from django.conf import settings
-from hotels.models import RoomType
+from hotels.models import RoomType, BoardType
 from django_jalali.db import models as jmodels
 from django.core.exceptions import ValidationError
 import re
@@ -39,7 +39,6 @@ class Booking(models.Model):
     children = models.PositiveSmallIntegerField(default=0, verbose_name="تعداد کودکان")
 
     total_price = models.DecimalField(max_digits=20, decimal_places=0, verbose_name="قیمت نهایی")
-    # max_length به ۳۰ تغییر پیدا کرد
     status = models.CharField(max_length=30, choices=STATUS_CHOICES, default='pending', verbose_name="وضعیت")
     agency = models.ForeignKey(Agency, on_delete=models.SET_NULL, null=True, blank=True, related_name="bookings", verbose_name="رزرو برای آژانس")
     notification_sent = models.BooleanField(default=False, verbose_name="اطلاع‌رسانی ارسال شده؟")
@@ -52,7 +51,8 @@ class Booking(models.Model):
         ordering = ['-created_at']
 
     def __str__(self):
-        return f"رزرو {self.booking_code} برای اتاق‌های هتل {self.hotel.name}"
+        # تغییر در تابع __str__ به دلیل حذف فیلد room_type
+        return f"رزرو {self.booking_code}"
 
 class BookingRoom(models.Model):
     """
@@ -60,12 +60,13 @@ class BookingRoom(models.Model):
     """
     booking = models.ForeignKey(Booking, on_delete=models.CASCADE, related_name="booking_rooms", verbose_name="رزرو")
     room_type = models.ForeignKey(RoomType, on_delete=models.PROTECT, related_name="booking_rooms", verbose_name="نوع اتاق")
+    board_type = models.ForeignKey(BoardType, on_delete=models.PROTECT, related_name="booking_rooms", verbose_name="نوع سرویس")
     quantity = models.PositiveSmallIntegerField(default=1, verbose_name="تعداد اتاق")
 
     class Meta:
         verbose_name = "اتاق رزرو شده"
         verbose_name_plural = "اتاق‌های رزرو شده"
-        unique_together = ('booking', 'room_type')
+        unique_together = ('booking', 'room_type', 'board_type')
 
 def validate_iranian_national_id(value):
     if not re.match(r'^\d{10}$', value):

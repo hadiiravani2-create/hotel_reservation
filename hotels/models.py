@@ -1,3 +1,4 @@
+
 # hotels/models.py
 
 from django.db import models
@@ -77,7 +78,8 @@ class City(models.Model):
 
 class Amenity(models.Model):
     name = models.CharField(max_length=100, unique=True, verbose_name="نام امکانات")
-
+    icon = models.ImageField(upload_to='amenity_icons/', blank=True, null=True, verbose_name="آیکون")
+    
     class Meta:
         verbose_name = "امکانات رفاهی"
         verbose_name_plural = "امکانات رفاهی"
@@ -102,6 +104,7 @@ class Hotel(models.Model):
     check_out_time = models.CharField(max_length=10, blank=True, null=True, verbose_name="زمان خروج")
     contact_phone = models.CharField(max_length=20, blank=True, null=True, verbose_name="شماره تماس")
     contact_email = models.EmailField(blank=True, null=True, verbose_name="ایمیل")
+    rules = models.TextField(blank=True, null=True, verbose_name="قوانین هتل")
 
     # vendor = models.ForeignKey(settings.AUTH_USER_MODEL, on_delete=models.CASCADE, related_name="hotels") # Todo uncomment
 

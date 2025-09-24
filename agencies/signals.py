@@ -11,6 +11,9 @@ def update_agency_balance(sender, instance, **kwargs):
     پس از ذخیره هر تراکنش، بدهی کل آژانس را دوباره محاسبه و ذخیره می‌کند.
     """
     agency = instance.agency
-    total_balance = AgencyTransaction.objects.filter(agency=agency).aggregate(total=Sum('amount'))['total'] or 0
+    
+    # محاسبه مجموع با استفاده از signed_amount
+    total_balance = sum(transaction.signed_amount for transaction in AgencyTransaction.objects.filter(agency=agency))
+    
     agency.current_balance = total_balance
     agency.save(update_fields=['current_balance'])

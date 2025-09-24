@@ -21,7 +21,12 @@ class AgencyReportAPIView(APIView):
                 status=status.HTTP_403_FORBIDDEN
             )
         
-        # TODO: پس از پیاده‌سازی مدل‌های نقش کاربران آژانس، در اینجا سطح دسترسی کاربر بررسی شود.
+        # بررسی سطح دسترسی بر اساس نقش کاربر
+        if user.agency_role.name not in ['admin', 'finance_manager', 'viewer']:
+            return Response(
+                {"error": "شما مجوز مشاهده گزارش مالی را ندارید."},
+                status=status.HTTP_403_FORBIDDEN
+            )
         
         agency = user.agency
 
