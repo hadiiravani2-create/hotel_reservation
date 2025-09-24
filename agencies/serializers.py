@@ -12,7 +12,7 @@ class AgencySerializer(serializers.ModelSerializer):
 class AgencyTransactionSerializer(serializers.ModelSerializer):
     class Meta:
         model = AgencyTransaction
-        fields = ['amount', 'transaction_type', 'transaction_date', 'description', 'created_at']
+        fields = ['amount', 'transaction_type', 'transaction_date', 'description', 'created_at', 'tracking_code']
 
 class AgencyReportSerializer(serializers.Serializer):
     """

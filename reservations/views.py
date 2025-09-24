@@ -48,8 +48,8 @@ class CreateBookingAPIView(APIView):
 
             agency = user.agency
 
-            active_contract = Contract.objects.filter(agency=agency, hotel=room_type.hotel, start_date__lte=check_in, end_date__gte=check_out).first()
-            if active_contract and agency.credit_blacklist_hotels.filter(id=room_type.hotel.id).exists():
+            # اصلاح منطق: لیست سیاه اعتباری باید مستقل از وجود قرارداد بررسی شود.
+            if agency.credit_blacklist_hotels.filter(id=room_type.hotel.id).exists():
                 return Response({"error": "استفاده از اعتبار برای این هتل مجاز نیست."}, status=status.HTTP_403_FORBIDDEN)
 
             if (agency.current_balance + final_price) > agency.credit_limit:
@@ -83,4 +83,43 @@ class MyBookingsAPIView(generics.ListAPIView):
     permission_classes = [IsAuthenticated]
 
     def get_queryset(self):
+        # فیلتر رزروها بر اساس آژانس کاربر برای کاربران آژانسی
+        if hasattr(self.request.user, 'agency') and self.request.user.agency:
+            return Booking.objects.filter(agency=self.request.user.agency)
+        # فیلتر رزروها بر اساس کاربر برای کاربران عادی
         return Booking.objects.filter(user=self.request.user)
+
+
+class BookingRequestAPIView(APIView):
+    authentication_classes = [TokenAuthentication]
+    permission_classes = [IsAuthenticated]
+
+    def post(self, request):
+        booking_code = request.data.get('booking_code')
+        request_type = request.data.get('request_type') # 'cancellation' or 'modification'
+        
+        if not booking_code or request_type not in ['cancellation', 'modification']:
+            return Response({"error": "کد رزرو و نوع درخواست (cancellation/modification) الزامی است."}, status=status.HTTP_400_BAD_REQUEST)
+
+        try:
+            booking = Booking.objects.get(booking_code=booking_code)
+        except Booking.DoesNotExist:
+            return Response({"error": "رزرو مورد نظر یافت نشد."}, status=status.HTTP_404_NOT_FOUND)
+
+        # اطمینان از اینکه کاربر فقط می‌تواند برای رزروهای خود درخواست ارسال کند
+        if not (booking.user == request.user or (hasattr(request.user, 'agency') and booking.agency == request.user.agency)):
+            return Response({"error": "شما مجوز انجام این درخواست را ندارید."}, status=status.HTTP_403_FORBIDDEN)
+        
+        if request_type == 'cancellation':
+            # تغییر وضعیت رزرو به "در انتظار لغو"
+            booking.status = 'cancellation_requested'
+            booking.save()
+            # Note: این وضعیت جدید باید به مدل Booking اضافه شود.
+            return Response({"success": True, "message": "درخواست لغو رزرو با موفقیت ثبت شد."}, status=status.HTTP_200_OK)
+
+        elif request_type == 'modification':
+            # تغییر وضعیت رزرو به "در انتظار ویرایش"
+            booking.status = 'modification_requested'
+            booking.save()
+            # Note: این وضعیت جدید نیز باید به مدل Booking اضافه شود.
+            return Response({"success": True, "message": "درخواست ویرایش رزرو با موفقیت ثبت شد."}, status=status.HTTP_200_OK)

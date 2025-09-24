@@ -3,7 +3,7 @@
 from rest_framework import serializers
 from .models import SiteSettings, Menu, MenuItem
 from rest_framework import serializers
-from .models import SiteSettings, Menu, MenuItem, CustomUser # CustomUser را اضافه کنید
+from .models import SiteSettings, Menu, MenuItem, CustomUser, AgencyUserRole
 from django.contrib.auth.password_validation import validate_password
 
 
@@ -47,6 +47,10 @@ class MenuSerializer(serializers.ModelSerializer):
         
         # core/serializers.py
 
+class AgencyUserRoleSerializer(serializers.ModelSerializer):
+    class Meta:
+        model = AgencyUserRole
+        fields = ['id', 'name']
 
 
 class UserRegisterSerializer(serializers.ModelSerializer):
@@ -55,21 +59,36 @@ class UserRegisterSerializer(serializers.ModelSerializer):
 
     class Meta:
         model = CustomUser
-        fields = ('username', 'password', 'password2', 'email', 'first_name', 'last_name')
+        fields = ('username', 'password', 'password2', 'email', 'first_name', 'last_name', 'agency', 'agency_role')
+        extra_kwargs = {
+            'agency': {'required': False, 'allow_null': True},
+            'agency_role': {'required': False, 'allow_null': True},
+        }
 
     def validate(self, attrs):
         if attrs['password'] != attrs['password2']:
             raise serializers.ValidationError({"password": "Password fields didn't match."})
+        
+        # بررسی منطق نقش آژانس
+        if attrs.get('agency') and not attrs.get('agency_role'):
+            raise serializers.ValidationError({"agency_role": "نقش کاربر آژانس الزامی است."})
+
         return attrs
 
     def create(self, validated_data):
+        # حذف فیلدهای غیرضروری برای ایجاد کاربر
+        password = validated_data.pop('password')
+        validated_data.pop('password2')
+
         # از متد create_user برای هش کردن صحیح رمز عبور استفاده می‌کنیم
-        user = CustomUser.objects.create_user(
+        user = CustomUser.objects.create(
             username=validated_data['username'],
-            email=validated_data['email'],
+            email=validated_data.get('email', ''),
             first_name=validated_data.get('first_name', ''),
-            last_name=validated_data.get('last_name', '')
+            last_name=validated_data.get('last_name', ''),
+            agency=validated_data.get('agency', None),
+            agency_role=validated_data.get('agency_role', None)
         )
-        user.set_password(validated_data['password'])
+        user.set_password(password)
         user.save()
         return user

@@ -20,8 +20,9 @@ class AgencyAdmin(admin.ModelAdmin):
 @admin.register(AgencyTransaction)
 class AgencyTransactionAdmin(admin.ModelAdmin):
     form = AgencyTransactionForm
-    list_display = ('agency', 'transaction_type', 'amount', 'transaction_date', 'booking', 'created_by')
+    list_display = ('agency', 'transaction_type', 'amount', 'transaction_date', 'booking', 'tracking_code', 'created_by')
     list_filter = ('agency', 'transaction_type', 'transaction_date')
+    search_fields = ('tracking_code', 'agency__name', 'description')
 
 class StaticRateInline(admin.TabularInline):
     model = StaticRate

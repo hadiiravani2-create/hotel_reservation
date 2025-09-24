@@ -13,6 +13,8 @@ urlpatterns = [
     path('pricing/', include('pricing.urls', namespace='pricing')),
     path('reservations/', include('reservations.urls', namespace='reservations')),
     path('', include('core.urls', namespace='core')),
+    # اضافه شدن آدرس‌های جدید برای اپلیکیشن hotels
+    path('hotels/', include('hotels.urls', namespace='hotels')),
 
     # API برای لاگین و دریافت توکن
     path('api/auth/login/', views.obtain_auth_token, name='api_token_auth'),

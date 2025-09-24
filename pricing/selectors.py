@@ -6,6 +6,7 @@ from hotels.models import RoomType, BoardType
 from agencies.models import Contract, StaticRate
 from .models import Availability, Price
 from django.shortcuts import get_object_or_404
+from decimal import Decimal
 
 
 def _get_daily_price_for_user(room_type, board_type, date, user):
@@ -65,15 +66,15 @@ def _get_daily_price_for_user(room_type, board_type, date, user):
         end_date__gte=date
     ).first()
     if contract and contract.discount_percentage:
-        discount = contract.discount_percentage / 100
-        price_info['price_per_night'] *= (1 - discount)
+        discount = Decimal(contract.discount_percentage) / Decimal(100)
+        price_info['price_per_night'] = price_info['price_per_night'] * (1 - discount)
         # می‌توان تخفیف را برای نفر اضافه و کودک هم اعمال کرد
         return price_info
 
     # اولویت ۳: تخفیف پیش‌فرض آژانس
     if agency.default_discount_percentage > 0:
-        discount = agency.default_discount_percentage / 100
-        price_info['price_per_night'] *= (1 - discount)
+        discount = Decimal(agency.default_discount_percentage) / Decimal(100)
+        price_info['price_per_night'] = price_info['price_per_night'] * (1 - discount)
         return price_info
 
     return price_info
@@ -91,12 +92,14 @@ def find_available_rooms(city_id: int, check_in_date, check_out_date, adults: in
     
     room_types = RoomType.objects.filter(
         hotel__city_id=city_id,
+        # فیلتر کردن بر اساس ظرفیت کل اتاق (پایه + نفر اضافه)
         base_capacity__gte=adults,
         child_capacity__gte=children
-    ).select_related('hotel')
+    ).select_related('hotel').prefetch_related('prices__board_type')
 
     final_results = []
     for room in room_types:
+        # بررسی موجودی برای کل دوره
         is_available = Availability.objects.filter(
             room_type=room, 
             date__in=date_range, 
@@ -116,13 +119,18 @@ def find_available_rooms(city_id: int, check_in_date, check_out_date, adults: in
             if board_type_id not in prices_by_board_type:
                 prices_by_board_type[board_type_id] = {
                     'board_type': price.board_type, 
-                    'total_price': 0, 
+                    'total_price': Decimal(0),
+                    'total_extra_adults_cost': Decimal(0),
+                    'total_children_cost': Decimal(0),
                     'is_complete': True
                 }
             
             price_info = _get_daily_price_for_user(room, price.board_type, price.date, user)
             if price_info:
+                extra_adults = max(0, adults - room.base_capacity)
                 prices_by_board_type[board_type_id]['total_price'] += price_info['price_per_night']
+                prices_by_board_type[board_type_id]['total_extra_adults_cost'] += extra_adults * price_info['extra_person_price']
+                prices_by_board_type[board_type_id]['total_children_cost'] += children * price_info['child_price']
             else:
                 prices_by_board_type[board_type_id]['is_complete'] = False
 
@@ -130,7 +138,8 @@ def find_available_rooms(city_id: int, check_in_date, check_out_date, adults: in
             {
                 'board_type_id': data['board_type'].id,
                 'board_type_name': data['board_type'].name,
-                'total_price': data['total_price']
+                # محاسبه قیمت نهایی شامل هزینه‌های اضافی
+                'total_price': data['total_price'] + data['total_extra_adults_cost'] + data['total_children_cost']
             }
             for bt_id, data in prices_by_board_type.items() if data['is_complete']
         ]
@@ -154,9 +163,9 @@ def calculate_booking_price(room_type_id: int, board_type_id: int, check_in_date
     date_range = [check_in_date + timedelta(days=i) for i in range(duration)]
 
     price_breakdown = []
-    total_base_price = 0
-    total_extra_adults_cost = 0
-    total_children_cost = 0
+    total_base_price = Decimal(0)
+    total_extra_adults_cost = Decimal(0)
+    total_children_cost = Decimal(0)
     
     extra_adults = max(0, adults - room_type.base_capacity)
     

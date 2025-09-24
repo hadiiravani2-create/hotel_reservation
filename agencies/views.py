@@ -20,7 +20,9 @@ class AgencyReportAPIView(APIView):
                 {"error": "شما کاربر آژانسی نیستید."},
                 status=status.HTTP_403_FORBIDDEN
             )
-
+        
+        # TODO: پس از پیاده‌سازی مدل‌های نقش کاربران آژانس، در اینجا سطح دسترسی کاربر بررسی شود.
+        
         agency = user.agency
 
         # دریافت ۲۰ رزرو آخر مربوط به تمام کاربران این آژانس

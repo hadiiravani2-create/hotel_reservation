@@ -1,9 +1,19 @@
 # core/admin.py
 
 from django.contrib import admin
-from .models import CustomUser, SiteSettings, Menu, MenuItem
+from django.contrib.auth.admin import UserAdmin as BaseUserAdmin
+from .models import CustomUser, SiteSettings, Menu, MenuItem, AgencyUserRole
 
-admin.site.register(CustomUser)
+@admin.register(CustomUser)
+class CustomUserAdmin(BaseUserAdmin):
+    fieldsets = BaseUserAdmin.fieldsets + (
+        ('اطلاعات آژانس', {'fields': ('agency', 'agency_role')}),
+    )
+    list_display = BaseUserAdmin.list_display + ('agency', 'agency_role')
+    list_filter = BaseUserAdmin.list_filter + ('agency',)
+
+
+admin.site.register(AgencyUserRole)
 
 @admin.register(SiteSettings)
 class SiteSettingsAdmin(admin.ModelAdmin):

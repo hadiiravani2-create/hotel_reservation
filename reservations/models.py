@@ -9,6 +9,7 @@ from django_jalali.db import models as jmodels
 from django.core.exceptions import ValidationError
 import re
 from agencies.models import Agency
+
 def generate_numeric_booking_code():
     # یک کد رزرو ۸ رقمی تصادفی بر اساس زمان فعلی ایجاد می‌کند
     timestamp_part = str(int(time.time()))[-5:] # ۵ رقم آخر زمان یونیکس
@@ -20,20 +21,26 @@ class Booking(models.Model):
         ('pending', 'در انتظار پرداخت'),
         ('confirmed', 'تایید شده'),
         ('cancelled', 'لغو شده'),
+        ('cancellation_requested', 'درخواست لغو شده'),
+        ('modification_requested', 'درخواست ویرایش شده'),
     )
 
     booking_code = models.CharField(max_length=8, default=generate_numeric_booking_code, unique=True, verbose_name="کد رزرو")
     user = models.ForeignKey(settings.AUTH_USER_MODEL, on_delete=models.SET_NULL, null=True, blank=True, related_name="bookings", verbose_name="کاربر رزرو کننده")
-    room_type = models.ForeignKey(RoomType, on_delete=models.PROTECT, related_name="bookings", verbose_name="نوع اتاق")
-
+    
+    # برای پشتیبانی از رزروهای گروهی، فیلد room_type حذف و به BookingRoom منتقل می‌شود
+    # room_type = models.ForeignKey(RoomType, on_delete=models.PROTECT, related_name="bookings", verbose_name="نوع اتاق")
+    
     check_in = jmodels.jDateField(verbose_name="تاریخ ورود")
     check_out = jmodels.jDateField(verbose_name="تاریخ خروج")
 
+    # این فیلدها اکنون نشان‌دهنده مجموع نفرات برای کل رزرو هستند.
     adults = models.PositiveSmallIntegerField(verbose_name="تعداد بزرگسالان")
     children = models.PositiveSmallIntegerField(default=0, verbose_name="تعداد کودکان")
 
     total_price = models.DecimalField(max_digits=20, decimal_places=0, verbose_name="قیمت نهایی")
-    status = models.CharField(max_length=20, choices=STATUS_CHOICES, default='pending', verbose_name="وضعیت")
+    # max_length به ۳۰ تغییر پیدا کرد
+    status = models.CharField(max_length=30, choices=STATUS_CHOICES, default='pending', verbose_name="وضعیت")
     agency = models.ForeignKey(Agency, on_delete=models.SET_NULL, null=True, blank=True, related_name="bookings", verbose_name="رزرو برای آژانس")
     notification_sent = models.BooleanField(default=False, verbose_name="اطلاع‌رسانی ارسال شده؟")
     created_at = models.DateTimeField(auto_now_add=True, verbose_name="زمان ایجاد")
@@ -45,8 +52,20 @@ class Booking(models.Model):
         ordering = ['-created_at']
 
     def __str__(self):
-        return f"رزرو {self.booking_code} برای اتاق {self.room_type.name}"
+        return f"رزرو {self.booking_code} برای اتاق‌های هتل {self.hotel.name}"
 
+class BookingRoom(models.Model):
+    """
+    این مدل واسط، رزرو را به انواع اتاق‌ها و تعداد آن‌ها متصل می‌کند.
+    """
+    booking = models.ForeignKey(Booking, on_delete=models.CASCADE, related_name="booking_rooms", verbose_name="رزرو")
+    room_type = models.ForeignKey(RoomType, on_delete=models.PROTECT, related_name="booking_rooms", verbose_name="نوع اتاق")
+    quantity = models.PositiveSmallIntegerField(default=1, verbose_name="تعداد اتاق")
+
+    class Meta:
+        verbose_name = "اتاق رزرو شده"
+        verbose_name_plural = "اتاق‌های رزرو شده"
+        unique_together = ('booking', 'room_type')
 
 def validate_iranian_national_id(value):
     if not re.match(r'^\d{10}$', value):

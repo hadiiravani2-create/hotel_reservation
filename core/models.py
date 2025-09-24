@@ -2,9 +2,32 @@
 
 from django.contrib.auth.models import AbstractUser
 from django.db import models
+from agencies.models import Agency
+
+class AgencyUserRole(models.Model):
+    """
+    مدل برای تعریف نقش‌های مختلف کاربران زیرمجموعه آژانس
+    """
+    ROLE_CHOICES = (
+        ('admin', 'مدیر آژانس'),
+        ('booking_agent', 'کاربر رزرو'),
+        ('finance_manager', 'مدیر مالی'),
+        ('viewer', 'فقط مشاهده‌گر'),
+    )
+    name = models.CharField(max_length=50, choices=ROLE_CHOICES, unique=True, verbose_name="نقش")
+
+    class Meta:
+        verbose_name = "نقش کاربر آژانس"
+        verbose_name_plural = "نقش‌های کاربران آژانس"
+
+    def __str__(self):
+        return self.get_name_display()
+
 
 class CustomUser(AbstractUser):
-    agency = models.ForeignKey('agencies.Agency', on_delete=models.SET_NULL, null=True, blank=True, related_name="users", verbose_name="آژانس")
+    agency = models.ForeignKey(Agency, on_delete=models.SET_NULL, null=True, blank=True, related_name="users", verbose_name="آژانس")
+    # فیلد جدید برای ارتباط با نقش کاربر در آژانس
+    agency_role = models.ForeignKey(AgencyUserRole, on_delete=models.SET_NULL, null=True, blank=True, verbose_name="نقش در آژانس")
 
 class SiteSettings(models.Model):
     # بخش اطلاعات اصلی سایت

@@ -25,6 +25,14 @@ class RoomSearchAPIView(APIView):
        check_out_str = request.query_params.get('check_out')
        adults = request.query_params.get('adults', 1)
        children = request.query_params.get('children', 0)
+       
+       # اضافه کردن پارامترهای فیلتر جدید
+       min_price = request.query_params.get('min_price')
+       max_price = request.query_params.get('max_price')
+       stars = request.query_params.get('stars')
+       amenities = request.query_params.get('amenities')
+       hotel_category = request.query_params.get('hotel_category')
+       room_category = request.query_params.get('room_category')
 
        if not all([city_id, check_in_str, check_out_str]):
            return Response({"error": "پارامترهای city_id, check_in و check_out الزامی هستند."}, status=status.HTTP_400_BAD_REQUEST)
@@ -35,6 +43,15 @@ class RoomSearchAPIView(APIView):
            adults = int(adults)
            children = int(children)
            city_id = int(city_id)
+           
+           # تبدیل پارامترهای جدید به نوع داده مناسب
+           min_price = int(min_price) if min_price else None
+           max_price = int(max_price) if max_price else None
+           stars = int(stars) if stars else None
+           amenities = [int(a) for a in amenities.split(',')] if amenities else None
+           hotel_category = int(hotel_category) if hotel_category else None
+           room_category = int(room_category) if room_category else None
+           
        except (ValueError, TypeError):
            return Response({"error": "فرمت پارامترها نامعتبر است."}, status=status.HTTP_400_BAD_REQUEST)
 
@@ -42,6 +59,18 @@ class RoomSearchAPIView(APIView):
            city_id=city_id, check_in_date=check_in, check_out_date=check_out,
            adults=adults, children=children, user=request.user
        )
+
+       # فیلتر نهایی بر اساس پارامترهای قیمت و دسته‌بندی
+       if min_price is not None:
+           available_rooms = [room for room in available_rooms if any(opt['total_price'] >= min_price for opt in room['board_options'])]
+       if max_price is not None:
+           available_rooms = [room for room in available_rooms if any(opt['total_price'] <= max_price for opt in room['board_options'])]
+       if stars is not None:
+           available_rooms = [room for room in available_rooms if room['hotel_stars'] == stars]
+       if amenities is not None:
+           # این بخش نیاز به تغییر در سلکتور برای برگرداندن amenities دارد
+           pass
+       
        serializer = RoomSearchResultSerializer(available_rooms, many=True)
        return Response(serializer.data)
 
@@ -73,5 +102,3 @@ class PriceQuoteAPIView(APIView):
             
         output_serializer = PriceQuoteOutputSerializer(price_details)
         return Response(output_serializer.data)
-    
-   

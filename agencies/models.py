@@ -40,6 +40,7 @@ class AgencyTransaction(models.Model):
     transaction_date = jmodels.jDateField(verbose_name="تاریخ تراکنش", default=jdate.today)
 
     description = models.TextField(blank=True, null=True, verbose_name="توضیحات")
+    tracking_code = models.CharField(max_length=100, blank=True, null=True, verbose_name="شماره پیگیری/تراکنش")
     created_at = models.DateTimeField(auto_now_add=True, verbose_name="زمان ثبت")
     created_by = models.ForeignKey(settings.AUTH_USER_MODEL, on_delete=models.SET_NULL, null=True, verbose_name="ثبت توسط")
 
