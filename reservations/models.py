@@ -11,9 +11,8 @@ import re
 from agencies.models import Agency
 
 def generate_numeric_booking_code():
-    # یک کد رزرو ۸ رقمی تصادفی بر اساس زمان فعلی ایجاد می‌کند
-    timestamp_part = str(int(time.time()))[-5:] # ۵ رقم آخر زمان یونیکس
-    random_part = str(random.randint(100, 999)) # ۳ رقم تصادفی
+    timestamp_part = str(int(time.time()))[-5:]
+    random_part = str(random.randint(100, 999))
     return timestamp_part + random_part
 
 class Booking(models.Model):
@@ -28,17 +27,11 @@ class Booking(models.Model):
     booking_code = models.CharField(max_length=8, default=generate_numeric_booking_code, unique=True, verbose_name="کد رزرو")
     user = models.ForeignKey(settings.AUTH_USER_MODEL, on_delete=models.SET_NULL, null=True, blank=True, related_name="bookings", verbose_name="کاربر رزرو کننده")
     
-    # برای پشتیبانی از رزروهای گروهی، فیلد room_type حذف و به BookingRoom منتقل می‌شود
-    # room_type = models.ForeignKey(RoomType, on_delete=models.PROTECT, related_name="bookings", verbose_name="نوع اتاق")
-    
     check_in = jmodels.jDateField(verbose_name="تاریخ ورود")
     check_out = jmodels.jDateField(verbose_name="تاریخ خروج")
 
-    # این فیلدها اکنون نشان‌دهنده مجموع نفرات برای کل رزرو هستند.
-    adults = models.PositiveSmallIntegerField(verbose_name="تعداد بزرگسالان")
-    children = models.PositiveSmallIntegerField(default=0, verbose_name="تعداد کودکان")
-
-    total_price = models.DecimalField(max_digits=20, decimal_places=0, verbose_name="قیمت نهایی")
+    # FIX: null=True و blank=True برای رفع IntegrityError و محاسبه قیمت در save_model
+    total_price = models.DecimalField(max_digits=20, decimal_places=0, verbose_name="قیمت نهایی", null=True, blank=True)
     status = models.CharField(max_length=30, choices=STATUS_CHOICES, default='pending', verbose_name="وضعیت")
     agency = models.ForeignKey(Agency, on_delete=models.SET_NULL, null=True, blank=True, related_name="bookings", verbose_name="رزرو برای آژانس")
     notification_sent = models.BooleanField(default=False, verbose_name="اطلاع‌رسانی ارسال شده؟")
@@ -51,7 +44,6 @@ class Booking(models.Model):
         ordering = ['-created_at']
 
     def __str__(self):
-        # تغییر در تابع __str__ به دلیل حذف فیلد room_type
         return f"رزرو {self.booking_code}"
 
 class BookingRoom(models.Model):
@@ -63,6 +55,10 @@ class BookingRoom(models.Model):
     board_type = models.ForeignKey(BoardType, on_delete=models.PROTECT, related_name="booking_rooms", verbose_name="نوع سرویس")
     quantity = models.PositiveSmallIntegerField(default=1, verbose_name="تعداد اتاق")
 
+    # فیلدهای نفرات اضافی در سطح اتاق
+    adults = models.PositiveSmallIntegerField(default=0, verbose_name="تعداد نفرات اضافی (بالای ظرفیت پایه)")
+    children = models.PositiveSmallIntegerField(default=0, verbose_name="تعداد کودکان این اتاق")
+    
     class Meta:
         verbose_name = "اتاق رزرو شده"
         verbose_name_plural = "اتاق‌های رزرو شده"

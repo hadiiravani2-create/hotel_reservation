@@ -96,7 +96,7 @@ def find_available_rooms(city_id: int, check_in_date, check_out_date, adults: in
 
     # فیلتر بر اساس ستاره هتل
     if stars:
-        room_types = room_types.filter(hotel__stars__in=stars)
+        room_types = room_types.filter(hotel__stars__in=stars) 
 
     # فیلتر بر اساس امکانات
     if amenities:
@@ -115,6 +115,13 @@ def find_available_rooms(city_id: int, check_in_date, check_out_date, adults: in
             quantity__gt=0
         ).count() == duration
         if not is_available:
+            continue
+        
+        # محاسبه تعداد نفرات اضافی بر اساس ظرفیت پایه اتاق
+        extra_adults_count = max(0, adults - room.base_capacity)
+        
+        # اگر تعداد نفرات اضافی یا کودک بیشتر از ظرفیت اتاق بود، این اتاق را حذف می‌کنیم
+        if extra_adults_count > room.extra_capacity or children > room.child_capacity:
             continue
 
         available_prices = Price.objects.filter(
@@ -136,9 +143,8 @@ def find_available_rooms(city_id: int, check_in_date, check_out_date, adults: in
             
             price_info = _get_daily_price_for_user(room, price.board_type, price.date, user)
             if price_info:
-                extra_adults = max(0, adults - room.base_capacity)
                 prices_by_board_type[board_type_id]['total_price'] += price_info['price_per_night']
-                prices_by_board_type[board_type_id]['total_extra_adults_cost'] += extra_adults * price_info['extra_person_price']
+                prices_by_board_type[board_type_id]['total_extra_adults_cost'] += extra_adults_count * price_info['extra_person_price']
                 prices_by_board_type[board_type_id]['total_children_cost'] += children * price_info['child_price']
             else:
                 prices_by_board_type[board_type_id]['is_complete'] = False
@@ -164,8 +170,8 @@ def find_available_rooms(city_id: int, check_in_date, check_out_date, adults: in
 
     return final_results
 
-
-def calculate_booking_price(room_type_id: int, board_type_id: int, check_in_date, check_out_date, adults: int, children: int, user):
+# تابع اصلی محاسبه قیمت که اکنون مستقیماً نفرات اضافی را به عنوان ورودی می‌پذیرد (برای رزروهای ادمین/API)
+def calculate_booking_price(room_type_id: int, board_type_id: int, check_in_date, check_out_date, extra_adults: int, children: int, user):
     room_type = get_object_or_404(RoomType, id=room_type_id)
     board_type = get_object_or_404(BoardType, id=board_type_id)
     duration = (check_out_date - check_in_date).days
@@ -175,8 +181,6 @@ def calculate_booking_price(room_type_id: int, board_type_id: int, check_in_date
     total_base_price = Decimal(0)
     total_extra_adults_cost = Decimal(0)
     total_children_cost = Decimal(0)
-    
-    extra_adults = max(0, adults - room_type.base_capacity)
     
     for single_date in date_range:
         price_info = _get_daily_price_for_user(room_type, board_type, single_date, user)

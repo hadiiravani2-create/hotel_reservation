@@ -11,6 +11,8 @@ urlpatterns = [
 
     # URL برای جستجوی عمومی
     path('api/search/', views.RoomSearchAPIView.as_view(), name='room_search_api'),
-    # محاسبه قیمت اتاق
+    # محاسبه قیمت اتاق (قبلی)
     path('api/calculate-price/', views.PriceQuoteAPIView.as_view(), name='price_quote_api'),
+    # URL جدید برای محاسبه قیمت رزرو گروهی از پنل ادمین
+    path('api/calculate-multi-price/', views.PriceQuoteMultiRoomAPIView.as_view(), name='price_quote_multi_api'),
 ]

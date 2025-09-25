@@ -1,0 +1,21 @@
+{% extends "admin/change_form.html" %}
+{% load i18n admin_urls %}
+
+{% block submit_buttons_bottom %}
+    <div class="submit-row">
+        {% if show_delete_link %}
+            {% url opts|admin_urlname:'delete' original.pk|admin_urlquote as delete_url %}
+            <p class="deletelink-box"><a href="{% url 'admin:reservations_booking_changelist' %}" class="deletelink">{% translate "Cancel" %}</a></p>
+        {% else %}
+             <p class="deletelink-box"><a href="{% url 'admin:reservations_booking_changelist' %}" class="deletelink">{% translate "Cancel" %}</a></p>
+        {% endif %}
+
+        {# دکمه "مشاهده اطلاعات رزرو" برای هدایت به Review View #}
+        {% if has_add_permission or has_change_permission %}
+            <button type="submit" name="_review" class="default" value="1">
+                {% translate "مشاهده اطلاعات رزرو" %}
+            </button>
+        {% endif %}
+
+    </div>
+{% endblock %}
