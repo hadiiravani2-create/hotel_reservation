@@ -42,6 +42,7 @@ INSTALLED_APPS = [
     'django.contrib.messages',
     'django.contrib.staticfiles',
     'rest_framework',
+
     'core.apps.CoreConfig',
     'hotels.apps.HotelsConfig',
     'pricing.apps.PricingConfig',
