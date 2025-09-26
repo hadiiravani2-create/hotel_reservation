@@ -24,17 +24,36 @@ BASE_DIR = Path(__file__).resolve().parent.parent
 SECRET_KEY = 'django-insecure-)x$4f&e7e-%u)cid2&v!i)q$ulxoyg=kxc)=m_n^789mtfhy7^'
 
 # SECURITY WARNING: don't run with debug turned on in production!
-DEBUG = False 
+DEBUG = True
 
 
 ALLOWED_HOSTS = ['192.168.10.131','2.180.44.137','demo.mirisafar.com']
+CORS_ALLOWED_ORIGINS = [
+    # آدرس بک‌اند فعلی (که قبلا به عنوان baseURL تعریف کردید)
+    "https://demo.mirisafar.com",
+    "http://demo.mirisafar.com",
+    
+    # آدرس اصلی که فرانت‌اند از آن به API دسترسی پیدا می‌کند (بسیار حیاتی)
+    # این همان آدرسی است که در تصویر Network دیده می‌شود:
+    "http://hotel.mirisafar.com", 
+    
+    # آدرس لوکال شما (برای توسعه):
+    "http://192.168.10.131:3000",
+    "http://localhost:3000", 
+    
+    # اگر از HTTPS برای فرانت‌اند استفاده می‌کنید:
+    "https://hotel.mirisafar.com", 
+]
 
+# 2. به‌روزرسانی CSRF (برای فرم‌های POST و احراز هویت)
+CSRF_TRUSTED_ORIGINS = CORS_ALLOWED_ORIGINS
 # Application definition
 
 # reservation_system/settings.py
 
 INSTALLED_APPS = [
     'jalali_date',
+    'corsheaders',
     'django.contrib.admin',
     'django.contrib.auth',
     'django.contrib.contenttypes',
@@ -42,7 +61,6 @@ INSTALLED_APPS = [
     'django.contrib.messages',
     'django.contrib.staticfiles',
     'rest_framework',
-
     'core.apps.CoreConfig',
     'hotels.apps.HotelsConfig',
     'pricing.apps.PricingConfig',
@@ -53,6 +71,7 @@ INSTALLED_APPS = [
 ]
 
 MIDDLEWARE = [
+    'corsheaders.middleware.CorsMiddleware',  # <-- اینجا اضافه شود (اولویت اول)
     'django.middleware.security.SecurityMiddleware',
     'django.contrib.sessions.middleware.SessionMiddleware',
     'django.middleware.common.CommonMiddleware',
