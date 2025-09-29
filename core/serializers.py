@@ -1,4 +1,4 @@
-# core/serializers.py
+# core/serializers.py v0.0.2
 
 from rest_framework import serializers
 from .models import SiteSettings, Menu, MenuItem
@@ -15,7 +15,7 @@ class SiteSettingsSerializer(serializers.ModelSerializer):
 
 class MenuItemChildrenSerializer(serializers.ModelSerializer):
     """
-    یک سریالایزر برای نمایش فرزندان یک آیتم منو (برای منوهای تو در تو)
+    A serializer to display the children of a menu item (for nested menus).
     """
     class Meta:
         model = MenuItem
@@ -23,7 +23,7 @@ class MenuItemChildrenSerializer(serializers.ModelSerializer):
 
 
 class MenuItemSerializer(serializers.ModelSerializer):
-    # از سریالایزر بالا برای نمایش فرزندان استفاده میکنیم
+    # Use the above serializer to display children
     children = MenuItemChildrenSerializer(many=True, read_only=True)
 
     class Meta:
@@ -32,8 +32,7 @@ class MenuItemSerializer(serializers.ModelSerializer):
 
 
 class MenuSerializer(serializers.ModelSerializer):
-    # فقط آیتمهای سطح بالا (که والد ندارند) را نمایش میدهیم
-    # آیتمهای فرزند به صورت تو در تو در سریالایزر بالا نمایش داده میشوند
+    # Only display top-level items (those without a parent)
     items = serializers.SerializerMethodField()
 
     class Meta:
@@ -41,9 +40,10 @@ class MenuSerializer(serializers.ModelSerializer):
         fields = ['name', 'slug', 'items']
 
     def get_items(self, obj):
-        # فیلتر کردن آیتمهایی که والد ندارند
+        # Filter items that do not have a parent
         top_level_items = obj.items.filter(parent__isnull=True)
-        return MenuItemSerializer(top_level_items, many=True).instance
+        # FIX: Use .data to return serialized data, not the instance
+        return MenuItemSerializer(top_level_items, many=True).data
         
         # core/serializers.py
 
@@ -52,6 +52,14 @@ class AgencyUserRoleSerializer(serializers.ModelSerializer):
         model = AgencyUserRole
         fields = ['id', 'name']
 
+# NEW: Serializer for User object in Auth Response
+class UserAuthSerializer(serializers.ModelSerializer):
+    # Use nested serializer for agency_role to get its name
+    agency_role = AgencyUserRoleSerializer(read_only=True)
+    class Meta:
+        model = CustomUser
+        # Only fields needed by the frontend's AuthContext
+        fields = ['username', 'agency_role']
 
 class UserRegisterSerializer(serializers.ModelSerializer):
     password = serializers.CharField(write_only=True, required=True, validators=[validate_password])
@@ -92,6 +100,12 @@ class UserRegisterSerializer(serializers.ModelSerializer):
         user.set_password(password)
         user.save()
         return user
+    
+    def to_representation(self, instance):
+        """Override to ensure the correct fields are returned, especially nested agency_role."""
+        # Use the dedicated serializer for a clean user object expected by the AuthContext
+        # Note: This is crucial for the AuthResponse structure in the frontend
+        return UserAuthSerializer(instance).data
 
 class AgencySubUserSerializer(serializers.ModelSerializer):
     password = serializers.CharField(write_only=True, required=True, validators=[validate_password])

@@ -26,32 +26,21 @@ SECRET_KEY = 'django-insecure-)x$4f&e7e-%u)cid2&v!i)q$ulxoyg=kxc)=m_n^789mtfhy7^
 # SECURITY WARNING: don't run with debug turned on in production!
 DEBUG = True
 
-
-ALLOWED_HOSTS = ['192.168.10.131','2.180.44.137','demo.mirisafar.com']
+ALLOWED_HOSTS = ['192.168.10.131','2.180.44.137','demo.mirisafar.com','hotel.mirisafar.com']
 CORS_ALLOWED_ORIGINS = [
-    # آدرس بک‌اند فعلی (که قبلا به عنوان baseURL تعریف کردید)
-    "https://demo.mirisafar.com",
-    "http://demo.mirisafar.com",
-    
-    # آدرس اصلی که فرانت‌اند از آن به API دسترسی پیدا می‌کند (بسیار حیاتی)
-    # این همان آدرسی است که در تصویر Network دیده می‌شود:
+    # ...
     "http://hotel.mirisafar.com", 
-    
-    # آدرس لوکال شما (برای توسعه):
+    # ...
     "http://192.168.10.131:3000",
     "http://localhost:3000", 
-    
-    # اگر از HTTPS برای فرانت‌اند استفاده می‌کنید:
-    "https://hotel.mirisafar.com", 
+    # ...
 ]
-
-# 2. به‌روزرسانی CSRF (برای فرم‌های POST و احراز هویت)
-CSRF_TRUSTED_ORIGINS = CORS_ALLOWED_ORIGINS
-# Application definition
+CSRF_TRUSTED_ORIGINS = CORS_ALLOWED_ORIGINS# Application definition
 
 # reservation_system/settings.py
 
 INSTALLED_APPS = [
+    'jazzmin',
     'jalali_date',
     'corsheaders',
     'django.contrib.admin',
@@ -147,8 +136,10 @@ USE_TZ = True
 
 # Static files (CSS, JavaScript, Images)
 # https://docs.djangoproject.com/en/5.2/howto/static-files/
-
 STATIC_URL = 'static/'
+
+# The directory where collectstatic will gather the static files for deployment.
+STATIC_ROOT = BASE_DIR / 'staticfiles'
 #STATIC_ROOT = os.path.join(BASE_DIR, 'staticfiles')
 
 # Default primary key field type

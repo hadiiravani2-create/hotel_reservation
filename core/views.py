@@ -1,4 +1,4 @@
-# core/views.py
+# core/views.py v0.0.2
 
 from rest_framework.views import APIView
 from rest_framework.response import Response
@@ -35,9 +35,19 @@ class UserRegisterAPIView(generics.CreateAPIView):
     serializer_class = UserRegisterSerializer
 
     def create(self, request, *args, **kwargs):
-        response = super().create(request, *args, **kwargs)
-        # پس از ثبت نام موفق، یک توکن برای کاربر جدید ایجاد و برمی‌گردانیم
-        user = CustomUser.objects.get(username=response.data['username'])
+        serializer = self.get_serializer(data=request.data)
+        serializer.is_valid(raise_exception=True)
+        self.perform_create(serializer)
+        
+        # دسترسی به کاربر ایجاد شده و توکن
+        user = serializer.instance 
         token, created = Token.objects.get_or_create(user=user)
-        response.data['token'] = token.key
-        return response
+        
+        # استفاده از to_representation برای دریافت شیء کاربر با فیلدهای صحیح (از جمله agency_role)
+        user_data = serializer.data
+        
+        # ساخت پاسخ نهایی مطابق با ساختار AuthResponse در فرانت‌اند
+        return Response({
+            'token': token.key,
+            'user': user_data,
+        }, status=status.HTTP_201_CREATED)
