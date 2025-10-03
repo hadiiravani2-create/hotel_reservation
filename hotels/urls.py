@@ -1,31 +1,17 @@
+# hadiiravani2-create/hotel_reservation/hotel_reservation-ad5e9db0ffd7b2bcb0d9a71d3e529d79333b2de0/hotels/urls.py
+# v1.0.1
 # hotels/urls.py
-# version 2
-
-from django.urls import path, include
-from rest_framework.routers import DefaultRouter
-from . import views
-
-# ایجاد روتر و ثبت ویوست‌ها
-router = DefaultRouter()
-router.register(r'cities', views.CityViewSet, basename='city')
-router.register(r'attractions', views.TouristAttractionViewSet, basename='tourist-attraction')
-router.register(r'hotels', views.HotelViewSet, basename='hotel')
-router.register(r'amenities', views.AmenityViewSet, basename='amenity')
-router.register(r'hotel-categories', views.HotelCategoryViewSet, basename='hotel-category')
-router.register(r'bed-types', views.BedTypeViewSet, basename='bed-type')
-router.register(r'room-categories', views.RoomCategoryViewSet, basename='room-category')
-router.register(r'room-types', views.RoomTypeViewSet, basename='room-type')
-
+from django.urls import path
+from . import views  # FIX: Import the entire views module to prevent circular dependency.
 
 app_name = 'hotels'
 
 urlpatterns = [
-    # آدرس‌های API از روتر
-    # CHANGED: Removed redundant 'api/' prefix. Final URL will be /api/cities/
-    path('', include(router.urls)),
-
-    # آدرس URL برای دریافت اتاق‌های یک هتل خاص بر اساس slug
-    # CHANGED: Removed redundant 'api/' prefix. Final URL will be /api/hotel/<slug:hotel_slug>/rooms/
-    path('hotel/<slug:hotel_slug>/rooms/', views.get_rooms_by_hotel_slug, name='hotel_rooms'),
-    
+    # FIX: Reference views via the module namespace (e.g., views.CityListAPIView).
+    path('api/cities/', views.CityListAPIView.as_view(), name='city-list'),
+    path('api/amenities/', views.AmenityListAPIView.as_view(), name='amenity-list'),
+    path('api/hotels/', views.HotelListAPIView.as_view(), name='hotel-list'),
+    path('api/hotels/<int:hotel_id>/', views.HotelDetailAPIView.as_view(), name='hotel-detail'),
+    path('api/hotels/<int:hotel_id>/rooms/', views.RoomTypeListAPIView.as_view(), name='room-type-list'),
+    path('api/room-types/<int:room_type_id>/', views.RoomTypeDetailAPIView.as_view(), name='room-type-detail'),
 ]
