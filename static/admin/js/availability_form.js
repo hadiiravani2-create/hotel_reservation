@@ -1,46 +1,72 @@
 // static/admin/js/availability_form.js
+// version 2
+// This comment is for versioning purposes.
 
-document.addEventListener("DOMContentLoaded", function() {
-    // اطمینان حاصل می‌کنیم که این کد فقط در صفحه افزودن/ویرایش Availability اجرا می‌شود
- if (window.location.pathname.includes('/admin/pricing/availability/') || 
-        window.location.pathname.includes('/admin/pricing/price/')) {
-        const hotelSelect = document.querySelector("#id_hotel");
-        const roomTypeSelect = document.querySelector("#id_room_type");
-        // URL برای API که در جنگو ساختیم
-        const url = `/pricing/api/get-rooms/`;
+// Use django.jQuery to ensure compatibility and avoid conflicts within the admin environment.
+if (typeof django !== 'undefined' && typeof django.jQuery !== 'undefined') {
+    (function($) {
+        $(document).ready(function() {
+            // Check if we are on the correct admin page for Availability or Price.
+            if (!$('body').is('.change-form.app-pricing.model-availability, .change-form.app-pricing.model-price')) {
+                return; // Exit if not on the correct page
+            }
+            
+            const hotelSelect = $('#id_hotel');
+            const roomTypeSelect = $('#id_room_type');
+            
+            // The new, dedicated URL for admin AJAX requests.
+            const ajaxUrl = '/pricing/ajax/get-room-types-for-admin/';
 
-        hotelSelect.addEventListener("change", function() {
-            const hotelId = this.value;
+            function updateRoomTypes() {
+                const hotelId = hotelSelect.val();
 
-            // اگر هتلی انتخاب نشده بود، لیست اتاق‌ها را خالی کن
-            if (!hotelId) {
-                roomTypeSelect.innerHTML = '<option value="">---------</option>';
-                return;
+                if (!hotelId) {
+                    roomTypeSelect.html('<option value="">---------</option>');
+                    roomTypeSelect.prop('disabled', true);
+                    return;
+                }
+
+                $.ajax({
+                    url: ajaxUrl,
+                    data: { 'hotel_id': hotelId },
+                    success: function(data) {
+                        roomTypeSelect.html(''); // Clear existing options
+                        roomTypeSelect.append('<option value="">---------</option>');
+
+                        if (data && data.length > 0) {
+                            $.each(data, function(index, room) {
+                                roomTypeSelect.append($('<option>', {
+                                    value: room.id,
+                                    text: room.name
+                                }));
+                            });
+                            roomTypeSelect.prop('disabled', false);
+                        } else {
+                            roomTypeSelect.html('<option value="">هیچ اتاقی برای این هتل یافت نشد</option>');
+                            roomTypeSelect.prop('disabled', true);
+                        }
+                    },
+                    error: function() {
+                        console.error('Error fetching room types for admin.');
+                        roomTypeSelect.html('<option value="">خطا در بارگذاری اتاق‌ها</option>');
+                        roomTypeSelect.prop('disabled', true);
+                    }
+                });
             }
 
-            // فراخوانی API با استفاده از Fetch
-            fetch(`${url}${hotelId}/`)
-    .then(response => {
-        if (!response.ok) {
-            throw new Error(`HTTP error! Status: ${response.status}`);
-        }
-        return response.json();
-    })
-    .then(data => {
-        console.log("Rooms received:", data); // لاگ برای دیباگ
-        roomTypeSelect.innerHTML = '<option value="">---------</option>';
-        if (data.length === 0) {
-            alert('هیچ اتاقی برای این هتل یافت نشد.');
-        }
-        data.forEach(function(room) {
-            const option = new Option(room.name, room.id);
-            roomTypeSelect.appendChild(option);
+            // Bind the event and run on page load
+            hotelSelect.on('change', updateRoomTypes);
+            if (hotelSelect.val()) {
+                // Important: We need to preserve the selected room_type value if it exists (on form error)
+                const selectedRoomTypeId = roomTypeSelect.val();
+                updateRoomTypes();
+                // A small delay to ensure options are loaded before re-selecting
+                setTimeout(function() {
+                    roomTypeSelect.val(selectedRoomTypeId);
+                }, 100); 
+            } else {
+                roomTypeSelect.prop('disabled', true);
+            }
         });
-    })
-    .catch(error => {
-        console.error('Error fetching rooms:', error);
-        alert('خطایی در بارگذاری اتاق‌ها رخ داد.');
-    });
-        });
-    }
-});
+    })(django.jQuery);
+}
