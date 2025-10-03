@@ -1,12 +1,26 @@
-
 # hotels/models.py
+# version 1
 
 from django.db import models
 from django.conf import settings
 
 
+# New abstract model for shared metadata
+class ImageMetadata(models.Model):
+    """
+    Abstract base class for models that require image metadata such as caption and display order.
+    Used to implement DRY principle for similar image-related models.
+    """
+    caption = models.CharField(max_length=255, blank=True, null=True, verbose_name="توضیحات تصویر")
+    order = models.PositiveIntegerField(default=0, verbose_name="ترتیب نمایش")
+    
+    class Meta:
+        abstract = True
+        ordering = ['order']
+
 # مدل‌های جدید برای دسته‌بندی و ویژگی‌های هتل و اتاق
 class TouristAttraction(models.Model):
+    # Model for tourist attractions related to a city.
     name = models.CharField(max_length=200, verbose_name="نام جاذبه")
     description = models.TextField(verbose_name="توضیحات", null=True, blank=True)
     city = models.ForeignKey('City', on_delete=models.CASCADE, related_name='attractions', verbose_name="شهر")
@@ -22,6 +36,7 @@ class TouristAttraction(models.Model):
         return self.name
 
 class HotelCategory(models.Model):
+    # Model for categorizing hotels (e.g., Luxury, Budget).
     name = models.CharField(max_length=100, unique=True, verbose_name="نام دسته‌بندی")
     slug = models.SlugField(unique=True, help_text="یکتا و برای آدرس‌دهی مناسب سئو", verbose_name="اسلاگ")
     description = models.TextField(blank=True, null=True, verbose_name="توضیحات")
@@ -36,6 +51,7 @@ class HotelCategory(models.Model):
 
 
 class BedType(models.Model):
+    # Model for different bed types (e.g., King, Queen, Twin).
     name = models.CharField(max_length=50, unique=True, verbose_name="نوع تخت")
     slug = models.SlugField(unique=True, verbose_name="اسلاگ")
 
@@ -47,6 +63,7 @@ class BedType(models.Model):
         return self.name
 
 class RoomCategory(models.Model):
+    # Model for classifying room types (e.g., Sea View, Balcony).
     name = models.CharField(max_length=100, unique=True, verbose_name="دسته‌بندی اتاق")
     slug = models.SlugField(unique=True, verbose_name="اسلاگ")
     description = models.TextField(blank=True, null=True, verbose_name="توضیحات")
@@ -60,6 +77,7 @@ class RoomCategory(models.Model):
 
 # مدل‌های اصلی پروژه
 class City(models.Model):
+    # Main model for representing cities where hotels are located.
     name = models.CharField(max_length=100, unique=True, verbose_name="نام شهر")
     slug = models.SlugField(unique=True, help_text="یکتا و برای آدرس‌دهی مناسب سئو", verbose_name="اسلاگ")
     description = models.TextField(blank=True, null=True, verbose_name="توضیحات شهر")
@@ -77,6 +95,7 @@ class City(models.Model):
 
 
 class Amenity(models.Model):
+    # Model for hotel and room amenities (e.g., WiFi, Pool).
     name = models.CharField(max_length=100, unique=True, verbose_name="نام امکانات")
     icon = models.ImageField(upload_to='amenity_icons/', blank=True, null=True, verbose_name="آیکون")
     
@@ -88,6 +107,7 @@ class Amenity(models.Model):
         return self.name
 
 class Hotel(models.Model):
+    # Main hotel model.
     name = models.CharField(max_length=255, verbose_name="نام هتل")
     slug = models.SlugField(unique=True, help_text="یکتا و برای آدرس‌دهی مناسب سئو", verbose_name="اسلاگ")
     stars = models.PositiveSmallIntegerField(default=3, verbose_name="ستاره هتل")
@@ -118,6 +138,7 @@ class Hotel(models.Model):
 
 
 class RoomType(models.Model):
+    # Model defining a specific type of room within a hotel.
     hotel = models.ForeignKey(Hotel, on_delete=models.CASCADE, related_name="room_types", verbose_name="هتل")
     name = models.CharField(max_length=100, verbose_name="نام نوع اتاق")
     code = models.CharField(max_length=20, unique=True, verbose_name="کد نوع اتاق")
@@ -138,12 +159,13 @@ class RoomType(models.Model):
     class Meta:
         verbose_name = "نوع اتاق"
         verbose_name_plural = "انواع اتاق"
-        unique_together = ('hotel', 'name') # جلوگیری از تعریف اتاق هم‌نام در یک هتل
+        unique_together = ('hotel', 'name') # Enforce unique room type name per hotel
 
     def __str__(self):
         return f"{self.name} - {self.hotel.name}"
 
 class BoardType(models.Model):
+    # Model for meal/board plans (e.g., Breakfast Included (BB), Full Board (FB)).
     name = models.CharField(max_length=100, unique=True, verbose_name="نام سرویس")
     code = models.CharField(max_length=10, unique=True, verbose_name="کد اختصاری (مثلا: BB, FB)")
     description = models.TextField(blank=True, null=True, verbose_name="توضیحات")
@@ -155,24 +177,22 @@ class BoardType(models.Model):
     def __str__(self):
         return self.name
 
-class HotelImage(models.Model):
+class HotelImage(ImageMetadata):
+    # Model for storing images related to a specific hotel. Inherits metadata from ImageMetadata.
     hotel = models.ForeignKey(Hotel, on_delete=models.CASCADE, related_name="images", verbose_name="هتل")
     image = models.ImageField(upload_to='hotel_images/', verbose_name="تصویر")
-    caption = models.CharField(max_length=255, blank=True, null=True, verbose_name="توضیحات تصویر")
-    order = models.PositiveIntegerField(default=0, verbose_name="ترتیب نمایش")
     
-    class Meta:
+    class Meta(ImageMetadata.Meta):
         verbose_name = "تصویر هتل"
         verbose_name_plural = "تصاویر هتل"
-        ordering = ['order']
+        # ordering is inherited from ImageMetadata
 
-class RoomImage(models.Model):
+class RoomImage(ImageMetadata):
+    # Model for storing images related to a specific room type. Inherits metadata from ImageMetadata.
     room_type = models.ForeignKey(RoomType, on_delete=models.CASCADE, related_name="images", verbose_name="نوع اتاق")
     image = models.ImageField(upload_to='room_images/', verbose_name="تصویر")
-    caption = models.CharField(max_length=255, blank=True, null=True, verbose_name="توضیحات تصویر")
-    order = models.PositiveIntegerField(default=0, verbose_name="ترتیب نمایش")
     
-    class Meta:
+    class Meta(ImageMetadata.Meta):
         verbose_name = "تصویر اتاق"
         verbose_name_plural = "تصاویر اتاق"
-        ordering = ['order']
+        # ordering is inherited from ImageMetadata

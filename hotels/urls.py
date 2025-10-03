@@ -1,4 +1,5 @@
 # hotels/urls.py
+# version 2
 
 from django.urls import path, include
 from rest_framework.routers import DefaultRouter
@@ -20,9 +21,11 @@ app_name = 'hotels'
 
 urlpatterns = [
     # آدرس‌های API از روتر
-    path('api/', include(router.urls)),
+    # CHANGED: Removed redundant 'api/' prefix. Final URL will be /api/cities/
+    path('', include(router.urls)),
 
     # آدرس URL برای دریافت اتاق‌های یک هتل خاص بر اساس slug
-    path('api/hotel/<slug:hotel_slug>/rooms/', views.get_rooms_by_hotel_slug, name='hotel_rooms'),
+    # CHANGED: Removed redundant 'api/' prefix. Final URL will be /api/hotel/<slug:hotel_slug>/rooms/
+    path('hotel/<slug:hotel_slug>/rooms/', views.get_rooms_by_hotel_slug, name='hotel_rooms'),
     
 ]
