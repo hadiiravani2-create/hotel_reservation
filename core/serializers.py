@@ -1,17 +1,29 @@
-# core/serializers.py v0.0.2
-
-from rest_framework import serializers
-from .models import SiteSettings, Menu, MenuItem
+# core/serializers.py v0.0.3
 from rest_framework import serializers
 from .models import SiteSettings, Menu, MenuItem, CustomUser, AgencyUserRole
 from django.contrib.auth.password_validation import validate_password
+from django.conf import settings  # Import settings for MEDIA_URL
+from rest_framework.authtoken.models import Token # Import Token for user registration
 
+# --- Site Settings Serializers ---
 
 class SiteSettingsSerializer(serializers.ModelSerializer):
+    # FIX 1.1: Explicitly define logo_url using SerializerMethodField
+    logo_url = serializers.SerializerMethodField()
+    
     class Meta:
         model = SiteSettings
-        # تمام فیلدهای مدل را شامل شود
-        fields = '__all__'
+        # List all fields explicitly for clarity
+        fields = ('site_name', 'logo_url', 'slogan', 'favicon', 'primary_color', 'secondary_color', 'text_color', 'phone_number', 'email', 'address', 'instagram_url', 'telegram_url', 'whatsapp_url', 'footer_text', 'enamad_code', 'copyright_text')
+
+    def get_logo_url(self, obj):
+        # FIX 1.2: Explicitly prepend settings.MEDIA_URL to ensure the frontend receives the full path.
+        # This resolves the missing '/media/' prefix (e.g., returns /media/site_settings/miri-logo2.png).
+        if obj.logo:
+            return f"{settings.MEDIA_URL}{obj.logo.name}"
+        return None
+
+# --- Menu Serializers ---
 
 class MenuItemChildrenSerializer(serializers.ModelSerializer):
     """
@@ -40,13 +52,13 @@ class MenuSerializer(serializers.ModelSerializer):
         fields = ['name', 'slug', 'items']
 
     def get_items(self, obj):
+        # FIX 2: This method is now cleanly defined within the class structure, resolving the AttributeError.
         # Filter items that do not have a parent
         top_level_items = obj.items.filter(parent__isnull=True)
-        # FIX: Use .data to return serialized data, not the instance
+        # Use .data to return serialized data, not the instance
         return MenuItemSerializer(top_level_items, many=True).data
         
-        # core/serializers.py
-
+        
 class AgencyUserRoleSerializer(serializers.ModelSerializer):
     class Meta:
         model = AgencyUserRole
@@ -88,7 +100,7 @@ class UserRegisterSerializer(serializers.ModelSerializer):
         password = validated_data.pop('password')
         validated_data.pop('password2')
 
-        # از متد create_user برای هش کردن صحیح رمز عبور استفاده می‌کنیم
+        # ایجاد کاربر و تنظیم پسورد
         user = CustomUser.objects.create(
             username=validated_data['username'],
             email=validated_data.get('email', ''),
@@ -99,6 +111,8 @@ class UserRegisterSerializer(serializers.ModelSerializer):
         )
         user.set_password(password)
         user.save()
+        # Ensure token is created after user registration
+        Token.objects.create(user=user) 
         return user
     
     def to_representation(self, instance):
@@ -121,7 +135,8 @@ class AgencySubUserSerializer(serializers.ModelSerializer):
     def create(self, validated_data):
         # اطمینان از اینکه فیلد agency توسط view تنظیم می‌شود و نه کاربر
         password = validated_data.pop('password')
-        user = CustomUser.objects.create_user(**validated_data)
+        # Note: CustomUser does not have a create_user manager method, using create and set_password
+        user = CustomUser.objects.create(**validated_data)
         user.set_password(password)
         user.save()
         return user
