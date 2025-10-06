@@ -2,7 +2,12 @@
 """Django's command-line utility for administrative tasks."""
 import os
 import sys
-
+print("="*50)
+print(f"EXECUTABLE: {sys.executable}")
+print("PYTHONPATH:")
+for p in sys.path:
+    print(f"  - {p}")
+print("="*50)
 
 def main():
     """Run administrative tasks."""

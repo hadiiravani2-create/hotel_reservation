@@ -1,27 +1,32 @@
-# reservations/views.py v1
-# Update: Implemented and activated the CreateBookingAPIView for user-facing bookings.
+# reservations/views.py v2.0.0
+# reservations/views.py
+# Reverted: Removed django-ratelimit implementation to resolve environment issues.
 from rest_framework.views import APIView
 from rest_framework.response import Response
 from rest_framework import status, generics
 from django.db import transaction
-from jdatetime import datetime as jdatetime
+from jdatetime import datetime as jdatetime, timedelta
 from decimal import Decimal
+from collections import defaultdict
+from django.core.exceptions import ValidationError
 
-# --- Use the renamed and corrected serializer ---
-from .serializers import CreateBookingAPISerializer, BookingListSerializer 
+# --- ایمپورت‌های مربوط به ratelimit حذف شد ---
+from .serializers import CreateBookingAPISerializer, BookingListSerializer
 from pricing.selectors import calculate_booking_price
 from hotels.models import RoomType, BoardType
+from pricing.models import Availability
 from .models import Booking, Guest, BookingRoom
-from agencies.models import Agency, AgencyTransaction
+from agencies.models import Agency, AgencyTransaction, AgencyUser
 from rest_framework.authentication import TokenAuthentication
 from rest_framework.permissions import IsAuthenticated
-from django.shortcuts import get_object_or_404
-import requests
+from django.utils.decorators import method_decorator
+
 
 class CreateBookingAPIView(APIView):
     authentication_classes = [TokenAuthentication]
     permission_classes = [IsAuthenticated]
 
+    # --- دکوریتور ratelimit حذف شد ---
     @transaction.atomic
     def post(self, request):
         serializer = CreateBookingAPISerializer(data=request.data)
@@ -32,74 +37,90 @@ class CreateBookingAPIView(APIView):
         user = request.user
         agency = None
 
-        # Check for agency booking
         if validated_data.get('agency_id'):
             try:
-                # Ensure the user is associated with the agency they are booking for
-                agency = Agency.objects.get(id=validated_data['agency_id'], users=user)
+                agency = Agency.objects.get(id=validated_data['agency_id'])
+                if not AgencyUser.objects.filter(user=user, agency=agency).exists():
+                    raise Agency.DoesNotExist
             except Agency.DoesNotExist:
                 return Response({"error": "آژانس مشخص شده معتبر نیست یا شما به آن دسترسی ندارید."}, status=status.HTTP_403_FORBIDDEN)
 
         try:
-            check_in_date = jdatetime.strptime(validated_data['check_in'], '%Y-%m-%d').date()
-            check_out_date = jdatetime.strptime(validated_data['check_out'], '%Y-%m-%d').date()
+            check_in = jdatetime.strptime(validated_data['check_in'], '%Y-%m-%d').date()
+            check_out = jdatetime.strptime(validated_data['check_out'], '%Y-%m-%d').date()
+            duration = (check_out - check_in).days
+            if duration <= 0:
+                raise ValueError("تاریخ خروج باید بعد از تاریخ ورود باشد.")
+            date_range = [check_in + timedelta(days=i) for i in range(duration)]
         except (ValueError, TypeError):
-            return Response({"error": "فرمت تاریخ نامعتبر است. باید YYYY-MM-DD باشد."}, status=status.HTTP_400_BAD_REQUEST)
+            return Response({"error": "فرمت تاریخ نامعتبر است یا بازه زمانی اشتباه است."}, status=status.HTTP_400_BAD_REQUEST)
 
-        # 1. Create the main Booking instance
-        booking = Booking.objects.create(
-            user=user,
-            agency=agency,
-            check_in=check_in_date,
-            check_out=check_out_date,
-            status='pending' # Default status
-        )
-
-        total_price = Decimal(0)
-
-        # 2. Loop through rooms, calculate price, and create BookingRoom instances
-        for room_data in validated_data['booking_rooms']:
-            price_details = calculate_booking_price(
-                room_type_id=room_data['room_type_id'],
-                board_type_id=room_data['board_type_id'],
-                check_in_date=check_in_date,
-                check_out_date=check_out_date,
-                extra_adults=room_data['adults'],
-                children=room_data['children'],
-                user=user # Pass user for agency-specific pricing in the future
+        try:
+            availability_requirements = defaultdict(int)
+            for room_data in validated_data['booking_rooms']:
+                for date in date_range:
+                    availability_requirements[(room_data['room_type_id'], date)] += room_data['quantity']
+            
+            availabilities_to_lock = Availability.objects.select_for_update().filter(
+                room_type_id__in=[k[0] for k in availability_requirements.keys()],
+                date__in=[k[1] for k in availability_requirements.keys()]
             )
+            
+            availability_map = {(a.room_type_id, a.date): a for a in availabilities_to_lock}
 
-            if price_details is None:
-                # This would mean pricing is not available for a given day
-                raise serializers.ValidationError(f"قیمت برای اتاق با شناسه {room_data['room_type_id']} در تاریخ‌های انتخابی یافت نشد.")
+            for (room_type_id, date), required_quantity in availability_requirements.items():
+                availability_obj = availability_map.get((room_type_id, date))
+                if not availability_obj or availability_obj.quantity < required_quantity:
+                    room_name = RoomType.objects.get(id=room_type_id).name
+                    raise ValidationError(f"ظرفیت برای اتاق '{room_name}' در تاریخ {date} کافی نیست.")
 
-            total_price += price_details['total_price'] * room_data['quantity']
-
-            BookingRoom.objects.create(
-                booking=booking,
-                room_type_id=room_data['room_type_id'],
-                board_type_id=room_data['board_type_id'],
-                quantity=room_data['quantity'],
-                adults=room_data['adults'],
-                children=room_data['children']
+            booking = Booking.objects.create(
+                user=user,
+                agency=agency,
+                check_in=check_in,
+                check_out=check_out,
+                status='pending'
             )
+            
+            total_price = Decimal(0)
+            
+            for room_data in validated_data['booking_rooms']:
+                price_details = calculate_booking_price(
+                    room_type_id=room_data['room_type_id'],
+                    board_type_id=room_data['board_type_id'],
+                    check_in_date=check_in,
+                    check_out_date=check_out,
+                    extra_adults=room_data['adults'],
+                    children=room_data['children'],
+                    user=user
+                )
+                if price_details is None:
+                    raise ValidationError(f"قیمت برای اتاق با شناسه {room_data['room_type_id']} یافت نشد.")
+                
+                total_price += price_details['total_price'] * room_data['quantity']
 
-        # 3. Create Guest instances
-        for guest_data in validated_data['guests']:
-            Guest.objects.create(booking=booking, **guest_data)
+                BookingRoom.objects.create(booking=booking, **room_data)
 
-        # 4. Finalize total price and save the booking
-        booking.total_price = total_price
-        booking.save()
-        
-        # Here you might initiate payment based on `payment_method`
-        # For now, we return the booking code
-        
+                for date in date_range:
+                    availability_obj = availability_map[(room_data['room_type_id'], date)]
+                    availability_obj.quantity -= room_data['quantity']
+                    availability_obj.save()
+
+            for guest_data in validated_data['guests']:
+                Guest.objects.create(booking=booking, **guest_data)
+                
+            booking.total_price = total_price
+            booking.save()
+
+        except ValidationError as e:
+            return Response({"error": str(e)}, status=status.HTTP_400_BAD_REQUEST)
+            
         return Response(
             {"success": True, "booking_code": booking.booking_code, "total_price": booking.total_price},
             status=status.HTTP_201_CREATED
         )
 
+# ... (بقیه کلاس‌های View بدون تغییر باقی می‌مانند) ...
 
 class MyBookingsAPIView(generics.ListAPIView):
     serializer_class = BookingListSerializer
@@ -108,13 +129,12 @@ class MyBookingsAPIView(generics.ListAPIView):
 
     def get_queryset(self):
         user = self.request.user
-        # Check if the user is linked to an agency via AgencyUser model
-        agency_user = user.agency_profiles.first()
-        if agency_user and agency_user.agency:
-            return Booking.objects.filter(agency=agency_user.agency)
-        return Booking.objects.filter(user=user, agency__isnull=True) # Only show personal bookings
+        agency_profile = user.agency_profile if hasattr(user, 'agency_profile') else None
+        if agency_profile and agency_profile.agency:
+            return Booking.objects.filter(agency=agency_profile.agency)
+        return Booking.objects.filter(user=user, agency__isnull=True)
 
-# ... (Rest of the file remains unchanged) ...
+
 class BookingRequestAPIView(APIView):
     authentication_classes = [TokenAuthentication]
     permission_classes = [IsAuthenticated]
@@ -131,7 +151,8 @@ class BookingRequestAPIView(APIView):
         except Booking.DoesNotExist:
             return Response({"error": "رزرو مورد نظر یافت نشد."}, status=status.HTTP_404_NOT_FOUND)
 
-        if not (booking.user == request.user or (hasattr(request.user, 'agency') and booking.agency == request.user.agency)):
+        agency_profile = request.user.agency_profile if hasattr(request.user, 'agency_profile') else None
+        if not (booking.user == request.user or (agency_profile and booking.agency == agency_profile.agency)):
             return Response({"error": "شما مجوز انجام این درخواست را ندارید."}, status=status.HTTP_403_FORBIDDEN)
         
         if request_type == 'cancellation':
@@ -177,10 +198,12 @@ class VerifyPaymentAPIView(APIView):
             return Response({"error": "رزرو مورد نظر یافت نشد."}, status=status.HTTP_404_NOT_FOUND)
 
         if status_code == 'success':
+            if booking.status != 'pending':
+                return Response({"error": "این رزرو قبلا پردازش شده است."}, status=status.HTTP_400_BAD_REQUEST)
+
             booking.status = 'confirmed'
             booking.save()
-            # This transaction should only be for agency credit payments, not online payments
-            # Logic needs refinement based on payment method
+            
             if booking.agency:
                  AgencyTransaction.objects.create(
                     agency=booking.agency,
