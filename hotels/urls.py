@@ -15,7 +15,7 @@ urlpatterns = [
     path('api/cities/', views.CityListAPIView.as_view(), name='city-list'),
     path('api/amenities/', views.AmenityListAPIView.as_view(), name='amenity-list'),
     path('api/hotels/', views.HotelListAPIView.as_view(), name='hotel-list'),
-    path('api/hotels/<slug:slug>/', views.HotelDetailAPIView.as_view(), name='hotel-detail'),
+    path('api/hotels/<slug:slug>/', views.HotelViewSet.as_view({'get': 'retrieve'}), name='hotel-detail'),
     path('api/hotels/<int:hotel_id>/rooms/', views.RoomTypeListAPIView.as_view(), name='room-type-list'),
     path('api/room-types/<int:room_type_id>/', views.RoomTypeDetailAPIView.as_view(), name='room-type-detail'),
 
