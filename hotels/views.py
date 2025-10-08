@@ -1,6 +1,6 @@
-# hadiiravani2-create/hotel_reservation/hotel_reservation-ad5e9db0ffd7b2bcb0d9a71d3e529d79333b2de0/hotels/views.py
-# v1.0.2
 # hotels/views.py
+# version: 0.1
+# This file defines the API views for the hotels application.
 
 from rest_framework import generics, viewsets
 from rest_framework.response import Response
@@ -34,7 +34,7 @@ class HotelListAPIView(generics.ListAPIView):
 class HotelDetailAPIView(generics.RetrieveAPIView):
     queryset = Hotel.objects.all()
     serializer_class = HotelSerializer
-    lookup_field = 'hotel_id' # Corresponds to <int:hotel_id> in URL
+    lookup_field = 'slug' # Corresponds to <int:hotel_id> in URL
 
 class RoomTypeListAPIView(generics.ListAPIView):
     serializer_class = RoomTypeSerializer
@@ -79,6 +79,24 @@ class HotelViewSet(viewsets.ModelViewSet):
     queryset = Hotel.objects.all()
     serializer_class = HotelSerializer
     lookup_field = 'slug'
+
+    # Override retrieve to pass date context to serializer
+    def retrieve(self, request, *args, **kwargs):
+        instance = self.get_object()
+        # Get query params for date-based pricing and availability
+        check_in = request.query_params.get('check_in')
+        duration = request.query_params.get('duration')
+        
+        # Pass params to the serializer context
+        context = self.get_serializer_context()
+        context.update({
+            'check_in': check_in,
+            'duration': duration,
+        })
+        
+        serializer = self.get_serializer(instance, context=context)
+        return Response(serializer.data)
+
 
 class AmenityViewSet(viewsets.ModelViewSet):
     queryset = Amenity.objects.all()
