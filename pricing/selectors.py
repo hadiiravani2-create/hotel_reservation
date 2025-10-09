@@ -1,28 +1,40 @@
-# pricing/selectors.py v5.0.0
-# Final Refactor: Solves hardcoded BoardType and performance issues with a pre-fetching strategy.
+# pricing/selectors.py
+# version: 5.1.2
+# This module provides functions for finding available rooms and calculating dynamic prices with proper fallbacks.
+
 from datetime import timedelta
-from django.db.models import Q, Min, Count, Sum
+from django.db.models import Count
 from hotels.models import RoomType, BoardType, Hotel
-from agencies.models import Contract, StaticRate, AgencyUser
-from .models import Availability, Price
+from agencies.models import Contract, StaticRate
+from .models import Price
 from django.shortcuts import get_object_or_404
 from decimal import Decimal
 from collections import defaultdict
 
 def _get_daily_price_for_user(room_type: RoomType, board_type: BoardType, date, user):
     """
-    This function remains the core of single-day price calculation.
-    It's now called by the optimized search function with pre-fetched data.
+    Calculates the price for a single room on a specific day for a given user.
+    FIX: If a daily price is not defined in the Price model, it now falls back
+    to the base price defined on the RoomType model itself.
     """
     public_price_obj = Price.objects.filter(room_type=room_type, board_type=board_type, date=date).first()
-    if not public_price_obj:
-        return None
 
-    final_price = {
-        'price_per_night': public_price_obj.price_per_night,
-        'extra_person_price': public_price_obj.extra_person_price,
-        'child_price': public_price_obj.child_price,
-    }
+    # --- Start of new fallback logic ---
+    if not public_price_obj:
+        # If no specific price is set for this day, use the room's default prices.
+        final_price = {
+            'price_per_night': room_type.price_per_night or 0,
+            'extra_person_price': room_type.extra_person_price or 0,
+            'child_price': room_type.child_price or 0,
+        }
+    else:
+        # A daily price is defined, use it.
+        final_price = {
+            'price_per_night': public_price_obj.price_per_night,
+            'extra_person_price': public_price_obj.extra_person_price,
+            'child_price': public_price_obj.child_price,
+        }
+    # --- End of new fallback logic ---
 
     agency_user = user.agency_profile if hasattr(user, 'agency_profile') else None
     if not user.is_authenticated or not agency_user:
@@ -32,8 +44,9 @@ def _get_daily_price_for_user(room_type: RoomType, board_type: BoardType, date, 
         agency=agency_user.agency,
         start_date__lte=date,
         end_date__gte=date,
-        hotel=room_type.hotel
-    ).first()
+        hotel=room_type.hotel,
+        is_active=True
+    ).order_by('-priority').first()
 
     if not contract:
         return final_price
@@ -51,7 +64,8 @@ def _get_daily_price_for_user(room_type: RoomType, board_type: BoardType, date, 
 
     return final_price
 
-
+# Note: The rest of the file (find_available_hotels, calculate_booking_price) remains unchanged from the previous version.
+# ... (The rest of your selectors.py file)
 def find_available_hotels(city_id: int, check_in_date, check_out_date, user, **filters):
     """
     A robust and performant search function using a pre-fetching strategy.
@@ -78,13 +92,11 @@ def find_available_hotels(city_id: int, check_in_date, check_out_date, user, **f
         return []
 
     # Step 2: Pre-fetch all necessary data in bulk to avoid N+1 queries.
-    # We fetch all prices for all available rooms and board types in the date range.
     all_prices = Price.objects.filter(
         room_type_id__in=available_room_ids,
         date__in=date_range
     ).select_related('room_type__hotel', 'board_type').order_by('date')
     
-    # Structure prices for fast lookup: {room_id: {date: [price_obj, ...]}}
     prices_map = defaultdict(lambda: defaultdict(list))
     for price in all_prices:
         prices_map[price.room_type_id][price.date].append(price)

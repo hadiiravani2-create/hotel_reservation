@@ -148,3 +148,9 @@ CELERY_TASK_SERIALIZER = 'json'
 CELERY_RESULT_SERIALIZER = 'json'
 
 STATICFILES_DIRS = [BASE_DIR / 'static']
+
+# JAZZMIN SETTINGS
+JAZZMIN_SETTINGS = {
+    # ... other settings
+    "custom_css": "admin/css/jazzmin_rtl.css",
+}

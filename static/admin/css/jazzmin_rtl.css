@@ -1,0 +1,74 @@
+body {
+    direction: rtl;
+    text-align: right;
+}
+
+/* Sidebar */
+.main-sidebar {
+    right: 0;
+    left: auto;
+}
+
+.content-wrapper, .main-footer, .main-header {
+    margin-right: 250px;
+    margin-left: 0;
+}
+
+.nav-sidebar .nav-link p {
+    display: inline;
+}
+
+.nav-sidebar .nav-link i.right {
+    right: auto;
+    left: 1rem;
+}
+
+/* Header and User menu */
+.navbar-nav {
+    padding-right: 0;
+}
+
+.navbar-expand .navbar-nav:first-child {
+    margin-right: 0 !important;
+    margin-left: auto !important;
+}
+
+/* Breadcrumbs */
+.breadcrumb {
+    padding: .75rem 1rem;
+    float: right;
+}
+
+.content-header h1 {
+    float: right;
+}
+
+/* Form fields and labels */
+label:not(.form-check-label):not(.custom-file-label) {
+    text-align: right;
+}
+
+.form-group {
+    text-align: right;
+}
+
+.form-actions {
+    text-align: left;
+}
+
+.card-header > .card-tools {
+    float: left;
+    margin-right: 0;
+}
+
+/* Tables */
+th {
+    text-align: right;
+}
+
+/* Fixes for smaller screens */
+@media (max-width: 767.98px) {
+    .main-header {
+        margin-right: 0;
+    }
+}
