@@ -1,6 +1,8 @@
 # pricing/selectors.py
-# version: 5.1.2
-# This module provides functions for finding available rooms and calculating dynamic prices with proper fallbacks.
+# version: 6.0.1
+# Fix: Added check for None return value from _get_daily_price_for_user inside find_available_hotels 
+#      to prevent search view from crashing when a valid Price is not found for every day, which fixes 
+#      the issue of not listing any hotels in the search results.
 
 from datetime import timedelta
 from django.db.models import Count
@@ -14,27 +16,23 @@ from collections import defaultdict
 def _get_daily_price_for_user(room_type: RoomType, board_type: BoardType, date, user):
     """
     Calculates the price for a single room on a specific day for a given user.
-    FIX: If a daily price is not defined in the Price model, it now falls back
-    to the base price defined on the RoomType model itself.
+    CRITICAL FIX: Removed fallback to RoomType base price. If a daily price (Price object)
+    is not defined for this specific (room_type, board_type, date) combination, 
+    it means this board type is NOT priced for this day, so return None.
     """
     public_price_obj = Price.objects.filter(room_type=room_type, board_type=board_type, date=date).first()
 
-    # --- Start of new fallback logic ---
     if not public_price_obj:
-        # If no specific price is set for this day, use the room's default prices.
-        final_price = {
-            'price_per_night': room_type.price_per_night or 0,
-            'extra_person_price': room_type.extra_person_price or 0,
-            'child_price': room_type.child_price or 0,
-        }
-    else:
-        # A daily price is defined, use it.
-        final_price = {
-            'price_per_night': public_price_obj.price_per_night,
-            'extra_person_price': public_price_obj.extra_person_price,
-            'child_price': public_price_obj.child_price,
-        }
-    # --- End of new fallback logic ---
+        # If no specific price is set for this day and this board type, 
+        # it means this combination is not valid/priced for booking.
+        return None
+    
+    # A daily price is defined, use it.
+    final_price = {
+        'price_per_night': public_price_obj.price_per_night,
+        'extra_person_price': public_price_obj.extra_person_price,
+        'child_price': public_price_obj.child_price,
+    }
 
     agency_user = user.agency_profile if hasattr(user, 'agency_profile') else None
     if not user.is_authenticated or not agency_user:
@@ -64,8 +62,6 @@ def _get_daily_price_for_user(room_type: RoomType, board_type: BoardType, date, 
 
     return final_price
 
-# Note: The rest of the file (find_available_hotels, calculate_booking_price) remains unchanged from the previous version.
-# ... (The rest of your selectors.py file)
 def find_available_hotels(city_id: int, check_in_date, check_out_date, user, **filters):
     """
     A robust and performant search function using a pre-fetching strategy.
@@ -118,7 +114,7 @@ def find_available_hotels(city_id: int, check_in_date, check_out_date, user, **f
         valid_board_type_ids = [bt_id for bt_id, count in board_type_day_counts.items() if count == duration]
 
         if not valid_board_type_ids:
-            continue # This room has no consistent pricing for the whole duration
+            continue # This room has no consistent pricing (in the Price model) for the whole duration
 
         # Calculate total price for each valid board type
         for bt_id in valid_board_type_ids:
@@ -134,16 +130,20 @@ def find_available_hotels(city_id: int, check_in_date, check_out_date, user, **f
                     break
                 
                 # We can reuse _get_daily_price_for_user, but it will re-query.
-                # For full optimization, the logic of _get_daily_price_for_user should be replicated here
-                # using pre-fetched contracts. For now, we accept this smaller N+1 for correctness.
-                # TODO: Pre-fetch contracts and apply logic here instead of calling the function.
                 price_info = _get_daily_price_for_user(price_obj_for_day.room_type, price_obj_for_day.board_type, date, user)
+                
+                # START FIX
+                if price_info is None: 
+                    is_valid_stay = False # Price calculation failed (e.g., due to logic in _get_daily_price_for_user returning None)
+                    break # Skip this board type for this room
+                # END FIX
+                
                 current_board_total_price += price_info['price_per_night']
 
             if is_valid_stay and current_board_total_price < min_room_total_price:
                 min_room_total_price = current_board_total_price
 
-        if min_room_total_price == float('inf'):
+        if min_room_total_price == float('inf') or min_room_total_price <= 0: # Ensure minimum price is valid and positive
             continue
             
         avg_price = min_room_total_price / Decimal(duration)
@@ -174,7 +174,7 @@ def find_available_hotels(city_id: int, check_in_date, check_out_date, user, **f
     return results
 
 
-def calculate_booking_price(room_type_id: int, board_type_id: int, check_in_date, check_out_date, extra_adults: int, children: int, user):
+def calculate_multi_booking_price(room_type_id: int, board_type_id: int, check_in_date, check_out_date, extra_adults: int, children: int, user):
     """
     Refactored to calculate extra costs on a daily basis.
     """
@@ -191,6 +191,7 @@ def calculate_booking_price(room_type_id: int, board_type_id: int, check_in_date
     for i in range(duration):
         current_date = check_in_date + timedelta(days=i)
         price_info = _get_daily_price_for_user(room_type, board_type, current_date, user)
+        # Check for None here, which now signals an unpriced board type
         if price_info is None: return None
 
         daily_base_price = price_info['price_per_night']

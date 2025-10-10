@@ -1,9 +1,10 @@
 # hotels/serializers.py
-# version: 1.3.0
-# Fix: Final reordering of all base serializers to the top of the file to resolve all cascading ImportErrors permanently.
+# version: 1.4.0
+# Feature: Added availability_quantity to RoomTypeSerializer to report minimum available rooms.
+# Fix: Added a check for total_price > 0 in get_priced_board_types to filter out unpriced boards with zero/ghost prices.
 
 from rest_framework import serializers
-from django.db.models import Count
+from django.db.models import Count, Min # Added Min
 from datetime import timedelta
 from persiantools.jdatetime import JalaliDate
 from decimal import Decimal
@@ -81,6 +82,9 @@ class RoomTypeSerializer(serializers.ModelSerializer):
     room_categories = RoomCategorySerializer(many=True, read_only=True)
     
     is_available = serializers.SerializerMethodField()
+    # START FIX 1: Added missing field for minimum available quantity
+    availability_quantity = serializers.SerializerMethodField()
+    # END FIX 1
     priced_board_types = serializers.SerializerMethodField()
     error_message = serializers.SerializerMethodField()
 
@@ -90,7 +94,7 @@ class RoomTypeSerializer(serializers.ModelSerializer):
             'id', 'name', 'code', 'description', 'base_capacity', 
             'extra_capacity', 'child_capacity', 'amenities', 'images', 
             'bed_types', 'room_categories',
-            'is_available', 'priced_board_types', 'error_message'
+            'is_available', 'availability_quantity', 'priced_board_types', 'error_message'
         ]
 
     def _get_date_range(self):
@@ -107,7 +111,25 @@ class RoomTypeSerializer(serializers.ModelSerializer):
     def get_is_available(self, obj):
         date_range, duration = self._get_date_range()
         if not date_range: return False
+        # Check if an Availability object exists for every day with quantity > 0
         return Availability.objects.filter(room_type=obj, date__in=date_range, quantity__gt=0).count() == duration
+
+    # START FIX 1: Method to get minimum available quantity (for Bug 2)
+    def get_availability_quantity(self, obj):
+        date_range, duration = self._get_date_range()
+        if not date_range: return 0
+        
+        # If not available for even one night, return 0 (handles quantity__gt=0 check)
+        if not self.get_is_available(obj): return 0
+        
+        # Calculate the minimum available quantity across the dates
+        min_availability = Availability.objects.filter(
+            room_type=obj, 
+            date__in=date_range
+        ).aggregate(min_q=Min('quantity'))['min_q'] or 0
+        
+        return min_availability
+    # END FIX 1
 
     def get_error_message(self, obj):
         if self.context.get('check_in') and not self.get_is_available(obj):
@@ -116,7 +138,8 @@ class RoomTypeSerializer(serializers.ModelSerializer):
 
     def get_priced_board_types(self, obj):
         date_range, duration = self._get_date_range()
-        if not date_range or not self.get_is_available(obj): return []
+        # Use the newly available quantity field to check overall availability
+        if not date_range or self.get_availability_quantity(obj) == 0: return []
         user = self.context.get('request').user if self.context.get('request') else None
         
         priced_boards = []
@@ -128,7 +151,11 @@ class RoomTypeSerializer(serializers.ModelSerializer):
                     current_total_price += price_info['price_per_night']
                 else:
                     is_calculable = False; break
-            if is_calculable:
+            
+            # START FIX 2: Check total_price > 0 to filter out unpriced boards (for Bug 1)
+            # This ensures only services with calculated, non-zero prices are displayed.
+            if is_calculable and current_total_price > 0:
+            # END FIX 2
                 priced_boards.append({'board_type': board_type, 'total_price': current_total_price})
         
         return PricedBoardTypeSerializer(priced_boards, many=True).data

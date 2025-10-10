@@ -1,5 +1,7 @@
-#pricing/views.py v1.0.2
-# Update: Changed import from find_available_rooms to find_available_hotels and used the new serializer.
+# pricing/views.py v1.1.0
+# Fix: Renamed calculate_booking_price to calculate_multi_booking_price following renaming in pricing.selectors,
+#      to resolve ImportError.
+
 from django.http import JsonResponse
 from rest_framework.views import APIView
 from rest_framework.response import Response
@@ -7,8 +9,8 @@ from rest_framework import status
 from jdatetime import datetime as jdatetime, timedelta
 
 from hotels.models import RoomType
-from .selectors import find_available_hotels, calculate_booking_price # <--- اصلاح شد
-from .serializers import HotelSearchResultSerializer, PriceQuoteInputSerializer, PriceQuoteOutputSerializer # <--- سریالایزر جدید اضافه شد
+from .selectors import find_available_hotels, calculate_multi_booking_price # <--- FIX: Renamed import
+from .serializers import HotelSearchResultSerializer, PriceQuoteInputSerializer, PriceQuoteOutputSerializer 
 from reservations.serializers import PriceQuoteMultiRoomInputSerializer 
 from core.models import CustomUser
 
@@ -17,7 +19,7 @@ def get_rooms_for_hotel(request, hotel_id):
     room_list = list(rooms.values('id', 'name'))
     return JsonResponse(room_list, safe=False)
 
-class HotelSearchAPIView(APIView): # نام کلاس هم برای خوانایی بهتر عوض شد
+class HotelSearchAPIView(APIView):
     authentication_classes = []
     permission_classes = []
      
@@ -46,17 +48,16 @@ class HotelSearchAPIView(APIView): # نام کلاس هم برای خوانای�
        except (ValueError, TypeError):
            return Response({"error": "فرمت پارامترها نامعتبر است."}, status=status.HTTP_400_BAD_REQUEST)
 
-       available_hotels = find_available_hotels( # <--- اصلاح شد
+       available_hotels = find_available_hotels(
            city_id=city_id, check_in_date=check_in, check_out_date=check_out,
            user=request.user
            # سایر فیلترها در آینده می‌توانند اینجا اضافه شوند
        )
        
-       serializer = HotelSearchResultSerializer(available_hotels, many=True) # <--- اصلاح شد
+       serializer = HotelSearchResultSerializer(available_hotels, many=True)
        return Response(serializer.data)
 
 class PriceQuoteAPIView(APIView):
-    # ... بدون تغییر ...
     authentication_classes = []
     permission_classes = []
 
@@ -72,7 +73,7 @@ class PriceQuoteAPIView(APIView):
         except ValueError:
             return Response({"error": "فرمت تاریخ نامعتبر است."}, status=status.HTTP_400_BAD_REQUEST)
         
-        price_details = calculate_booking_price(
+        price_details = calculate_multi_booking_price( # <--- FIX: Renamed function call
             room_type_id=data['room_type_id'],
             board_type_id=data['board_type_id'],
             check_in_date=check_in, check_out_date=check_out,
@@ -89,7 +90,6 @@ class PriceQuoteAPIView(APIView):
 
 
 class PriceQuoteMultiRoomAPIView(APIView):
-    # ... بدون تغییر ...
     authentication_classes = []
     permission_classes = []
 
@@ -116,7 +116,7 @@ class PriceQuoteMultiRoomAPIView(APIView):
         total_final_price = 0
         
         for room_data in data['booking_rooms']:
-            price_details = calculate_booking_price(
+            price_details = calculate_multi_booking_price( # <--- FIX: Renamed function call
                 room_type_id=room_data['room_type_id'],
                 board_type_id=room_data['board_type_id'],
                 check_in_date=check_in, 

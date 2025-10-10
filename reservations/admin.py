@@ -4,7 +4,7 @@ from .models import Booking, Guest, BookingRoom
 from .forms import BookingForm
 from agencies.models import AgencyTransaction
 from django.db.models import Sum
-from pricing.selectors import calculate_booking_price
+from pricing.selectors import calculate_multi_booking_price 
 from hotels.models import RoomType, BoardType
 from django.core.exceptions import ValidationError
 from django.forms import inlineformset_factory 

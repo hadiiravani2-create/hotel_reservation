@@ -12,7 +12,7 @@ from django.core.exceptions import ValidationError
 
 # --- ایمپورت‌های مربوط به ratelimit حذف شد ---
 from .serializers import CreateBookingAPISerializer, BookingListSerializer
-from pricing.selectors import calculate_booking_price
+from pricing.selectors import calculate_multi_booking_price
 from hotels.models import RoomType, BoardType
 from pricing.models import Availability
 from .models import Booking, Guest, BookingRoom
