@@ -1,6 +1,7 @@
-# reservations/views.py v2.0.0
-# reservations/views.py
-# Reverted: Removed django-ratelimit implementation to resolve environment issues.
+# reservations/views.py v2.0.2
+# FIX: Replaced calculate_booking_price with calculate_multi_booking_price for proper price calculation.
+# Feature: Added extra_requests saving to BookingRoom creation.
+
 from rest_framework.views import APIView
 from rest_framework.response import Response
 from rest_framework import status, generics
@@ -41,6 +42,7 @@ class CreateBookingAPIView(APIView):
             try:
                 agency = Agency.objects.get(id=validated_data['agency_id'])
                 if not AgencyUser.objects.filter(user=user, agency=agency).exists():
+                    # If agency_id is provided, ensure the user is an authorized user of that agency.
                     raise Agency.DoesNotExist
             except Agency.DoesNotExist:
                 return Response({"error": "آژانس مشخص شده معتبر نیست یا شما به آن دسترسی ندارید."}, status=status.HTTP_403_FORBIDDEN)
@@ -59,8 +61,10 @@ class CreateBookingAPIView(APIView):
             availability_requirements = defaultdict(int)
             for room_data in validated_data['booking_rooms']:
                 for date in date_range:
+                    # Sum up required quantity for each room type on each date
                     availability_requirements[(room_data['room_type_id'], date)] += room_data['quantity']
             
+            # Lock the availability rows for update
             availabilities_to_lock = Availability.objects.select_for_update().filter(
                 room_type_id__in=[k[0] for k in availability_requirements.keys()],
                 date__in=[k[1] for k in availability_requirements.keys()]
@@ -68,51 +72,62 @@ class CreateBookingAPIView(APIView):
             
             availability_map = {(a.room_type_id, a.date): a for a in availabilities_to_lock}
 
+            # Check and confirm availability
             for (room_type_id, date), required_quantity in availability_requirements.items():
                 availability_obj = availability_map.get((room_type_id, date))
                 if not availability_obj or availability_obj.quantity < required_quantity:
                     room_name = RoomType.objects.get(id=room_type_id).name
                     raise ValidationError(f"ظرفیت برای اتاق '{room_name}' در تاریخ {date} کافی نیست.")
 
+            # Calculate total price for all rooms in one go (Fixing NameError)
+            price_data = calculate_multi_booking_price(
+                validated_data['booking_rooms'], 
+                check_in, 
+                check_out, 
+                user
+            )
+            
+            if price_data is None:
+                raise ValidationError("خطا در محاسبه قیمت نهایی.")
+
+            total_price = price_data['total_price']
+
+            # Create Booking
             booking = Booking.objects.create(
                 user=user,
                 agency=agency,
                 check_in=check_in,
                 check_out=check_out,
-                status='pending'
+                status='pending',
+                total_price=total_price # Set total price here
             )
             
-            total_price = Decimal(0)
-            
+            # Create BookingRooms and update availability
             for room_data in validated_data['booking_rooms']:
-                price_details = calculate_booking_price(
+                # The total price calculation is now handled centrally by calculate_multi_booking_price
+                BookingRoom.objects.create(
+                    booking=booking, 
                     room_type_id=room_data['room_type_id'],
                     board_type_id=room_data['board_type_id'],
-                    check_in_date=check_in,
-                    check_out_date=check_out,
-                    extra_adults=room_data['adults'],
+                    quantity=room_data['quantity'],
+                    adults=room_data['adults'],
                     children=room_data['children'],
-                    user=user
+                    extra_requests=room_data.get('extra_requests') # Save extra requests
                 )
-                if price_details is None:
-                    raise ValidationError(f"قیمت برای اتاق با شناسه {room_data['room_type_id']} یافت نشد.")
-                
-                total_price += price_details['total_price'] * room_data['quantity']
-
-                BookingRoom.objects.create(booking=booking, **room_data)
 
                 for date in date_range:
                     availability_obj = availability_map[(room_data['room_type_id'], date)]
                     availability_obj.quantity -= room_data['quantity']
                     availability_obj.save()
 
+            # Create Guests
             for guest_data in validated_data['guests']:
                 Guest.objects.create(booking=booking, **guest_data)
                 
-            booking.total_price = total_price
-            booking.save()
-
         except ValidationError as e:
+            # Delete the booking object if it was created before the exception
+            if 'booking' in locals():
+                booking.delete()
             return Response({"error": str(e)}, status=status.HTTP_400_BAD_REQUEST)
             
         return Response(
@@ -214,6 +229,7 @@ class VerifyPaymentAPIView(APIView):
                 )
             return Response({"success": True, "message": "پرداخت با موفقیت انجام شد و رزرو شما تایید گردید."}, status=status.HTTP_200_OK)
         else:
-            booking.status = 'cancelled'
+            # We assume a failed payment means cancellation
+            booking.status = 'cancelled' 
             booking.save()
             return Response({"success": False, "message": "پرداخت ناموفق بود. رزرو لغو شد."}, status=status.HTTP_400_BAD_REQUEST)

@@ -1,5 +1,6 @@
-# reservations/models.py
-
+# reservations/models.py v0.0.1
+# Added city_of_origin to Guest model.
+# Added extra_requests to BookingRoom model.
 import random
 import time
 from django.db import models
@@ -58,6 +59,8 @@ class BookingRoom(models.Model):
     # فیلدهای نفرات اضافی در سطح اتاق
     adults = models.PositiveSmallIntegerField(default=0, verbose_name="تعداد نفرات اضافی (بالای ظرفیت پایه)")
     children = models.PositiveSmallIntegerField(default=0, verbose_name="تعداد کودکان این اتاق")
+    # New field for extra guest requests
+    extra_requests = models.TextField(blank=True, null=True, verbose_name="درخواست‌های اضافی اتاق")
     
     class Meta:
         verbose_name = "اتاق رزرو شده"
@@ -82,6 +85,8 @@ class Guest(models.Model):
     passport_number = models.CharField(max_length=50, blank=True, null=True, verbose_name="شماره پاسپورت")
     phone_number = models.CharField(max_length=11, blank=True, null=True, verbose_name="شماره تماس", validators=[validate_iranian_mobile])
     nationality = models.CharField(max_length=50, blank=True, null=True, verbose_name="تابعیت")
+    # New field for the city of origin
+    city_of_origin = models.CharField(max_length=100, blank=True, null=True, verbose_name="شهر مبدأ")
 
     class Meta:
         verbose_name = "میهمان"
