@@ -1,5 +1,5 @@
-# hadiiravani2-create/hotel_reservation/hotel_reservation-ad5e9db0ffd7b2bcb0d9a71d3e529d79333b2de0/core/views.py
-# v1.0.0
+# core/views.py
+# version: 1.0.1
 from rest_framework.views import APIView
 from rest_framework.response import Response
 from rest_framework import status, generics
@@ -10,10 +10,10 @@ from django.shortcuts import get_object_or_404
 from .models import SiteSettings, Menu, CustomUser 
 
 # ایمپورت سریالایزرها
-# FIX: Importing MenuItemSerializer as it's needed by MenuView.
-from .serializers import SiteSettingsSerializer, MenuItemSerializer, UserRegisterSerializer, MenuSerializer
+from .serializers import SiteSettingsSerializer, MenuItemSerializer, UserRegisterSerializer, UserLoginSerializer, UserAuthSerializer, MenuSerializer # ADDED: UserLoginSerializer, UserAuthSerializer
 
 class SiteSettingsAPIView(APIView):
+    """API view to fetch site settings."""
     def get(self, request):
         settings = SiteSettings.objects.first()
         if not settings:
@@ -21,9 +21,9 @@ class SiteSettingsAPIView(APIView):
         serializer = SiteSettingsSerializer(settings)
         return Response(serializer.data, status=status.HTTP_200_OK)
 
-# CORRECTED: Renamed class from MenuAPIView to MenuView to match urls.py
-# and changed logic to return a list of menu items as the frontend expects.
+
 class MenuView(APIView):
+    """API view to fetch a specific menu and its nested items."""
     def get(self, request, menu_slug):
         # Find the menu by its slug
         menu = get_object_or_404(Menu, slug=menu_slug)
@@ -37,6 +37,7 @@ class MenuView(APIView):
 
 
 class UserRegisterAPIView(generics.CreateAPIView):
+    """API view for user registration."""
     queryset = CustomUser.objects.all()
     serializer_class = UserRegisterSerializer
 
@@ -48,9 +49,31 @@ class UserRegisterAPIView(generics.CreateAPIView):
         user = serializer.instance 
         token, created = Token.objects.get_or_create(user=user)
         
+        # UserAuthSerializer is implicitly called inside UserRegisterSerializer.to_representation
         user_data = serializer.data
         
         return Response({
             'token': token.key,
             'user': user_data,
         }, status=status.HTTP_201_CREATED)
+
+# NEW CLASS: API view for user login
+class UserLoginAPIView(APIView):
+    """API view for user login and returning token."""
+    def post(self, request):
+        serializer = UserLoginSerializer(data=request.data, context={'request': request})
+        serializer.is_valid(raise_exception=True)
+        
+        # The validated user object is stored in serializer.validated_data['user']
+        user = serializer.validated_data['user']
+        
+        # Get or create token for the authenticated user
+        token, created = Token.objects.get_or_create(user=user)
+        
+        # Serialize user data using the dedicated Auth serializer
+        user_data = UserAuthSerializer(user).data
+        
+        return Response({
+            'token': token.key,
+            'user': user_data,
+        }, status=status.HTTP_200_OK)

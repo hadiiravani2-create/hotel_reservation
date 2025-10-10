@@ -1,10 +1,9 @@
 # hotels/serializers.py
-# version: 1.4.0
-# Feature: Added availability_quantity to RoomTypeSerializer to report minimum available rooms.
-# Fix: Added a check for total_price > 0 in get_priced_board_types to filter out unpriced boards with zero/ghost prices.
+# version: 1.4.1
+# Feature: Added sorting logic to HotelSerializer to display available rooms first by lowest price.
 
 from rest_framework import serializers
-from django.db.models import Count, Min # Added Min
+from django.db.models import Count, Min 
 from datetime import timedelta
 from persiantools.jdatetime import JalaliDate
 from decimal import Decimal
@@ -178,5 +177,24 @@ class HotelSerializer(serializers.ModelSerializer):
         ]
 
     def get_available_rooms(self, obj):
+        """
+        Returns a sorted list of available room types for the given date range.
+        Sorts by lowest base price (min of priced_board_types) first.
+        """
         if not self.context.get('check_in') or not self.context.get('duration'): return []
-        return RoomTypeSerializer(obj.room_types.all(), many=True, context=self.context).data
+        
+        # 1. Serialize all rooms
+        all_rooms_data = RoomTypeSerializer(obj.room_types.all(), many=True, context=self.context).data
+        
+        # 2. Filter for availability
+        available_rooms = [room for room in all_rooms_data if room.get('is_available')]
+        
+        # 3. Sort by lowest total price (min of priced_board_types)
+        def sort_key(room):
+            prices = [item['total_price'] for item in room.get('priced_board_types', [])]
+            # Use a large number if no price is found, to push it to the end
+            return min(prices) if prices else float('inf') 
+
+        available_rooms.sort(key=sort_key)
+
+        return available_rooms

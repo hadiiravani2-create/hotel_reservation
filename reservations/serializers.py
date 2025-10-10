@@ -1,7 +1,6 @@
-# reservations/serializers.py v1.1.0
-# Feature: Added extra_requests to BookingRoomSerializer.
-# Feature: Added city_of_origin to GuestSerializer.
-# Feature: Updated CreateBookingAPISerializer validation for principal guest and payment methods.
+# reservations/serializers.py
+# version: 1.1.1
+# Feature: Added optional 'wants_to_register' field to GuestSerializer for future user registration support.
 
 from rest_framework import serializers
 from .models import Guest, Booking, BookingRoom
@@ -10,10 +9,13 @@ from hotels.models import RoomType
 class GuestSerializer(serializers.ModelSerializer):
     # Added city_of_origin
     city_of_origin = serializers.CharField(max_length=100, required=False, allow_null=True, allow_blank=True)
+    # NEW: Optional field for guest booking, indicating intent to register later.
+    wants_to_register = serializers.BooleanField(required=False, write_only=True, default=False)
     
     class Meta:
         model = Guest
-        fields = ['first_name', 'last_name', 'is_foreign', 'national_id', 'passport_number', 'phone_number', 'nationality', 'city_of_origin']
+        # Added wants_to_register to fields for input payload
+        fields = ['first_name', 'last_name', 'is_foreign', 'national_id', 'passport_number', 'phone_number', 'nationality', 'city_of_origin', 'wants_to_register']
 
     def validate(self, data):
         """

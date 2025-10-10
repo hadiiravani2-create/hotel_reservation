@@ -1,9 +1,11 @@
-# core/serializers.py v0.0.3
+# core/serializers.py
+# version: 0.0.4
 from rest_framework import serializers
 from .models import SiteSettings, Menu, MenuItem, CustomUser, AgencyUserRole
 from django.contrib.auth.password_validation import validate_password
 from django.conf import settings  # Import settings for MEDIA_URL
 from rest_framework.authtoken.models import Token # Import Token for user registration
+from django.contrib.auth import authenticate  # NEW: Import for login logic
 
 # --- Site Settings Serializers ---
 
@@ -72,6 +74,42 @@ class UserAuthSerializer(serializers.ModelSerializer):
         model = CustomUser
         # Only fields needed by the frontend's AuthContext
         fields = ['username', 'agency_role']
+
+# NEW: Serializer for User Login (Auth Input)
+class UserLoginSerializer(serializers.Serializer):
+    """Serializer for authenticating users."""
+    username = serializers.CharField(max_length=255)
+    password = serializers.CharField(
+        label=("Password"),
+        style={'input_type': 'password'},
+        trim_whitespace=False,
+        max_length=128,
+        write_only=True
+    )
+    # The 'user' field will hold the validated user object
+    user = serializers.HiddenField(default=None, write_only=True) 
+
+    def validate(self, attrs):
+        # Authenticate user using Django's built-in function
+        username = attrs.get('username')
+        password = attrs.get('password')
+
+        if username and password:
+            user = authenticate(request=self.context.get('request'),
+                                username=username, password=password)
+            
+            # The authenticate call returns the user if successful, or None otherwise.
+            if not user:
+                msg = ('Unable to log in with provided credentials.')
+                raise serializers.ValidationError(msg, code='authorization')
+        else:
+            msg = ('Must include "username" and "password".')
+            raise serializers.ValidationError(msg, code='authorization')
+
+        # Store the validated user instance in the serializer instance data
+        attrs['user'] = user
+        return attrs
+
 
 class UserRegisterSerializer(serializers.ModelSerializer):
     password = serializers.CharField(write_only=True, required=True, validators=[validate_password])
