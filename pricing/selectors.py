@@ -1,8 +1,8 @@
 # pricing/selectors.py
-# version: 6.0.1
-# Fix: Added check for None return value from _get_daily_price_for_user inside find_available_hotels 
-#      to prevent search view from crashing when a valid Price is not found for every day, which fixes 
-#      the issue of not listing any hotels in the search results.
+# version: 6.0.4
+# CRITICAL FIX: Implemented robust key access in calculate_multi_booking_price using .get() with fallback 
+#               to handle the key mismatch between 'adults'/'children' (from BookingRoomSerializer) and 
+#               'extra_adults'/'children_count' (from PriceQuoteMultiRoomInputSerializer), resolving the KeyError.
 
 from datetime import timedelta
 from django.db.models import Count
@@ -174,37 +174,63 @@ def find_available_hotels(city_id: int, check_in_date, check_out_date, user, **f
     return results
 
 
-def calculate_multi_booking_price(room_type_id: int, board_type_id: int, check_in_date, check_out_date, extra_adults: int, children: int, user):
+def calculate_multi_booking_price(booking_rooms, check_in_date, check_out_date, user):
     """
-    Refactored to calculate extra costs on a daily basis.
+    Calculates the final price for a list of multiple room bookings across the entire stay duration.
+    This function processes the list of room data (including extra adults/children) passed by the CreateBookingAPIView.
     """
-    room_type = get_object_or_404(RoomType, id=room_type_id)
-    board_type = get_object_or_404(BoardType, id=board_type_id)
+    # Find RoomType and BoardType once per room/board combination
+    room_types_map = {rt.id: rt for rt in RoomType.objects.filter(id__in=[r['room_type_id'] for r in booking_rooms])}
+    board_types_map = {bt.id: bt for bt in BoardType.objects.filter(id__in=[r['board_type_id'] for r in booking_rooms])}
+    
     duration = (check_out_date - check_in_date).days
     if duration <= 0: return None
 
-    total_price = Decimal(0)
-    total_extra_adults_cost = Decimal(0)
-    total_children_cost = Decimal(0)
-    price_breakdown = []
-
-    for i in range(duration):
-        current_date = check_in_date + timedelta(days=i)
-        price_info = _get_daily_price_for_user(room_type, board_type, current_date, user)
-        # Check for None here, which now signals an unpriced board type
-        if price_info is None: return None
-
-        daily_base_price = price_info['price_per_night']
-        total_price += daily_base_price
-        price_breakdown.append({'date': str(current_date), 'price': daily_base_price})
-        
-        total_extra_adults_cost += extra_adults * price_info['extra_person_price']
-        total_children_cost += children * price_info['child_price']
-
-    total_price += total_extra_adults_cost + total_children_cost
+    total_booking_price = Decimal(0)
     
+    for room_data in booking_rooms:
+        # Get room-specific parameters from the list element
+        room_type_id = room_data['room_type_id']
+        board_type_id = room_data['board_type_id']
+        quantity = room_data['quantity']
+        
+        # CRITICAL FIX: Using .get() with fallbacks to handle both:
+        # 1. Booking Flow (keys: 'adults', 'children') - used by reservations/views.py
+        # 2. Price Quote Flow (keys: 'extra_adults', 'children_count') - used by pricing/views.py
+        extra_adults = room_data.get('adults') or room_data.get('extra_adults') or 0
+        children = room_data.get('children') or room_data.get('children_count') or 0
+
+        room_type = room_types_map.get(room_type_id)
+        board_type = board_types_map.get(board_type_id)
+
+        if not room_type or not board_type:
+            # Should be caught by serializer, but as a safeguard
+            return None 
+
+        # Calculate price for this single room selection (all nights, all quantities, all extras)
+        room_selection_price = Decimal(0)
+        
+        for i in range(duration):
+            current_date = check_in_date + timedelta(days=i)
+            price_info = _get_daily_price_for_user(room_type, board_type, current_date, user)
+            
+            if price_info is None:
+                # If any day is unpriced, the whole booking is invalid
+                return None
+
+            # Calculate daily total price for ALL quantities and ALL extras for THIS room type
+            # Must ensure extra_adults/children are cast to Decimal if they come as int (which they should)
+            daily_base_price_total = price_info['price_per_night'] * quantity
+            # Ensure multiplication is safe (though extra_adults/children should be numbers)
+            daily_extra_adults_cost = Decimal(extra_adults) * price_info['extra_person_price'] * quantity
+            daily_children_cost = Decimal(children) * price_info['child_price'] * quantity
+            
+            room_selection_price += daily_base_price_total + daily_extra_adults_cost + daily_children_cost
+
+        # Add the total price for this room selection to the overall booking total
+        total_booking_price += room_selection_price
+
     return {
-        "room_name": room_type.name, "hotel_name": room_type.hotel.name, "board_type_name": board_type.name,
-        "price_breakdown": price_breakdown, "extra_adults_cost": total_extra_adults_cost, "children_cost": total_children_cost,
-        "total_price": total_price
+        # The view only requires total_price from this multi-room calculation
+        "total_price": total_booking_price
     }

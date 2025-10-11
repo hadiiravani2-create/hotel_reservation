@@ -1,6 +1,7 @@
 # reservations/views.py
-# version: 2.0.4
-# FIX: Restored missing APIView classes (MyBookingsAPIView, BookingRequestAPIView, InitiatePaymentAPIView, VerifyPaymentAPIView) that were omitted in v2.0.3 for brevity, causing ImportError.
+# version: 2.0.5
+# Feature: Added BookingDetailAPIView to retrieve details of a single booking by booking_code, 
+#          supporting the new payment/checkout process structure.
 
 from rest_framework.views import APIView
 from rest_framework.response import Response
@@ -11,17 +12,19 @@ from decimal import Decimal
 from collections import defaultdict
 from django.core.exceptions import ValidationError
 from django.contrib.auth import get_user_model
+from django.shortcuts import get_object_or_404 # Needed for the new view
 
 # --- Imports ---
-from .serializers import CreateBookingAPISerializer, BookingListSerializer
+from .serializers import CreateBookingAPISerializer, BookingListSerializer, BookingDetailSerializer # Added BookingDetailSerializer
 from pricing.selectors import calculate_multi_booking_price
 from hotels.models import RoomType, BoardType
 from pricing.models import Availability
 from .models import Booking, Guest, BookingRoom
 from agencies.models import Agency, AgencyTransaction, AgencyUser
 from rest_framework.authentication import TokenAuthentication
-from rest_framework.permissions import AllowAny, IsAuthenticated # ADDED: IsAuthenticated again
+from rest_framework.permissions import AllowAny, IsAuthenticated 
 from django.utils.decorators import method_decorator
+from rest_framework.exceptions import PermissionDenied # Needed for the new view
 
 CustomUser = get_user_model()
 
@@ -107,7 +110,10 @@ class CreateBookingAPIView(APIView):
                 check_in=check_in,
                 check_out=check_out,
                 status='pending',
-                total_price=total_price 
+                total_price=total_price,
+                # NOTE: payment_method is NOT a field on the Booking model. It is only on the serializer. 
+                # This field should be passed to the payment view if needed, but is not stored on the booking object itself. 
+                # We are removing the reliance on payment_method here.
             )
             
             # Create BookingRooms and update availability
@@ -149,7 +155,38 @@ class CreateBookingAPIView(APIView):
         )
 
 
+class BookingDetailAPIView(APIView):
+    """Retrieves details of a single booking by booking_code for payment/review page."""
+    authentication_classes = [TokenAuthentication]
+    permission_classes = [AllowAny]
+
+    def get(self, request, booking_code):
+        booking = get_object_or_404(Booking, booking_code=booking_code)
+        
+        # Authorization check: 
+        # 1. Booking must be pending.
+        # OR
+        # 2. User must be logged in AND own the booking (or be an authorized agency user).
+        
+        is_owner_or_agency = False
+        if request.user.is_authenticated:
+            is_owner_or_agency = (booking.user == request.user)
+            if booking.agency:
+                agency_user = booking.agency.agency_users.filter(user=request.user).exists()
+                is_owner_or_agency = is_owner_or_agency or agency_user
+        
+        # Logic: If booking is confirmed/cancelled, only the owner can see it. 
+        # If booking is pending, anyone who knows the code can potentially see it (for guest booking payment flow), 
+        # but we should restrict confirmed/processed bookings.
+        if booking.status != 'pending' and not is_owner_or_agency:
+             raise PermissionDenied("شما اجازه دسترسی به جزئیات این رزرو را ندارید.")
+        
+        serializer = BookingDetailSerializer(booking)
+        return Response(serializer.data, status=status.HTTP_200_OK)
+
+
 class MyBookingsAPIView(generics.ListAPIView):
+    # ... (Omitted)
     """API view for authenticated users to list their bookings."""
     serializer_class = BookingListSerializer
     authentication_classes = [TokenAuthentication]
@@ -166,6 +203,7 @@ class MyBookingsAPIView(generics.ListAPIView):
 
 
 class BookingRequestAPIView(APIView):
+    # ... (Omitted)
     """API view to request cancellation or modification of a booking."""
     authentication_classes = [TokenAuthentication]
     permission_classes = [IsAuthenticated]
@@ -199,6 +237,7 @@ class BookingRequestAPIView(APIView):
 
 
 class InitiatePaymentAPIView(APIView):
+    # ... (Omitted)
     """API view to initiate payment for a pending booking."""
     authentication_classes = [TokenAuthentication]
     permission_classes = [IsAuthenticated]
@@ -218,6 +257,7 @@ class InitiatePaymentAPIView(APIView):
         })
 
 class VerifyPaymentAPIView(APIView):
+    # ... (Omitted)
     """API view to verify payment status and confirm booking."""
     authentication_classes = [TokenAuthentication]
     permission_classes = [IsAuthenticated]

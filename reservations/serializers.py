@@ -1,48 +1,99 @@
 # reservations/serializers.py
-# version: 1.1.1
-# Feature: Added optional 'wants_to_register' field to GuestSerializer for future user registration support.
+# version: 1.1.7
+# CRITICAL FIX: Removed 'payment_method' from BookingDetailSerializer.Meta.fields as it does not exist on the Booking model.
+#               Ensured all previous fixes for optional guests and detail serializers are present.
 
 from rest_framework import serializers
 from .models import Guest, Booking, BookingRoom
 from hotels.models import RoomType
+# Note: Assuming hotels.serializers is importable if needed for BoardTypeSerializer
+# from hotels.serializers import BoardTypeSerializer 
+
+
+# --- Detail Serializers for Read Operations ---
+
+class GuestDetailSerializer(serializers.ModelSerializer):
+    """Serializer for displaying full guest details (Read-Only)."""
+    class Meta:
+        model = Guest
+        fields = [
+            'first_name', 'last_name', 'is_foreign', 'national_id', 
+            'passport_number', 'phone_number', 'nationality', 'city_of_origin'
+        ]
+
+class BookingRoomDetailSerializer(serializers.ModelSerializer):
+    """Serializer for displaying details of a booked room."""
+    room_type_name = serializers.CharField(source='room_type.name', read_only=True)
+    board_type = serializers.CharField(source='board_type.name', read_only=True) # Name of board type
+    hotel_name = serializers.CharField(source='room_type.hotel.name', read_only=True)
+    
+    class Meta:
+        model = BookingRoom
+        fields = [
+            'id', 'room_type_name', 'board_type', 'hotel_name', 'quantity', 
+            'adults', 'children', 'extra_requests'
+        ]
+
+class BookingDetailSerializer(serializers.ModelSerializer):
+    """Master serializer for displaying full booking summary on the payment page."""
+    hotel_name = serializers.CharField(source='booking_rooms.first.room_type.hotel.name', read_only=True)
+    total_guests = serializers.SerializerMethodField()
+    booking_rooms = BookingRoomDetailSerializer(many=True, read_only=True)
+    guests = GuestDetailSerializer(many=True, read_only=True)
+    
+    class Meta:
+        model = Booking
+        fields = [
+            'booking_code', 'hotel_name', 'check_in', 'check_out', 'total_price', 
+            'status', 'created_at', 'updated_at', 'total_guests',
+            'booking_rooms', 'guests', # CRITICAL FIX: Removed 'payment_method' 
+        ]
+        read_only_fields = fields 
+
+    def get_total_guests(self, obj):
+        # Calculate total number of actual guests recorded
+        return obj.guests.count()
+
+
+# --- Write/Input Serializers ---
 
 class GuestSerializer(serializers.ModelSerializer):
-    # Added city_of_origin
+    # Overriding ModelSerializer default behavior for optional fields:
+    first_name = serializers.CharField(max_length=100, required=False, allow_blank=True) 
+    last_name = serializers.CharField(max_length=100, required=False, allow_blank=True)  
+    
+    # Explicitly setting allow_null=True for CharFields that are null=True on the model
+    national_id = serializers.CharField(max_length=10, required=False, allow_blank=True, allow_null=True)
+    passport_number = serializers.CharField(max_length=50, required=False, allow_blank=True, allow_null=True)
+    phone_number = serializers.CharField(max_length=11, required=False, allow_blank=True, allow_null=True)
+    nationality = serializers.CharField(max_length=50, required=False, allow_blank=True, allow_null=True)
     city_of_origin = serializers.CharField(max_length=100, required=False, allow_null=True, allow_blank=True)
+    
     # NEW: Optional field for guest booking, indicating intent to register later.
     wants_to_register = serializers.BooleanField(required=False, write_only=True, default=False)
     
     class Meta:
         model = Guest
-        # Added wants_to_register to fields for input payload
+        # All fields are included, but optionality is controlled by explicit definitions above
         fields = ['first_name', 'last_name', 'is_foreign', 'national_id', 'passport_number', 'phone_number', 'nationality', 'city_of_origin', 'wants_to_register']
 
     def validate(self, data):
         """
-        Custom validation for a single guest based on the first guest's role (main guest)
-        and whether they are foreign or domestic.
+        Custom validation for a single guest. Now relies on the parent CreateBookingAPISerializer 
+        to enforce mandatory fields for the principal guest only.
         """
-        is_foreign = data.get('is_foreign', False)
         national_id = data.get('national_id')
-        passport_number = data.get('passport_number')
-        nationality = data.get('nationality')
         
-        # Check compulsory fields for all guests
-        if not data.get('first_name') or not data.get('last_name'):
-            raise serializers.ValidationError("نام و نام خانوادگی میهمان الزامی است.")
-            
-        # Check fields based on is_foreign flag
-        if is_foreign:
-            # If foreign, passport number and nationality are required
-            if not passport_number or not nationality:
-                raise serializers.ValidationError("برای میهمانان خارجی، شماره پاسپورت و تابعیت الزامی است.")
-            if national_id: # National ID must be empty or None
-                data['national_id'] = None 
+        # Clean up conflicting ID fields based on the 'is_foreign' flag.
+        if data.get('is_foreign', False):
+             # Ensure national_id is None for foreign guests if supplied
+             if national_id:
+                 data['national_id'] = None
         else:
-            # If domestic (or no flag set), national ID is required (will be checked in validate_iranian_national_id)
-            # We rely on the model's validator for the format, but ensure one of the IDs is present in case of first guest validation.
-            # Here, we only check for the first (principal) guest being complete. For others, we relax the check.
-            pass
+             # Ensure passport info is None for domestic guests if supplied
+             if data.get('passport_number') or data.get('nationality'):
+                 data['passport_number'] = None
+                 data['nationality'] = None
             
         return data
 
@@ -69,7 +120,9 @@ class CreateBookingAPISerializer(serializers.Serializer):
     check_in = serializers.CharField()
     check_out = serializers.CharField()
     guests = GuestSerializer(many=True, allow_empty=False)
-    payment_method = serializers.ChoiceField(choices=BOOKING_PAYMENT_CHOICES, default='online')
+    # payment_method is removed from the payload for the two-step flow. We keep it here
+    # temporarily but it must be ignored by the view (which is currently the case).
+    payment_method = serializers.ChoiceField(choices=BOOKING_PAYMENT_CHOICES, default='online') 
     agency_id = serializers.IntegerField(required=False, allow_null=True) # Optional for agency bookings
     
     # New field for mandatory acceptance of rules
@@ -106,30 +159,19 @@ class CreateBookingAPISerializer(serializers.Serializer):
             total_adult_capacity = (room_type.base_capacity * quantity) + extra_adults
             total_capacity_count += total_adult_capacity
 
-        # Rule 1: Validate total adult guests count (excluding children)
-        # Assuming that 'adults' in the list of guests only includes adults (base capacity + extra adults)
-        # And the children count is separate. The current FE sends ALL guests including children.
-        # Based on the FE logic, total guests *should* be adults + extra adults + children.
-        # Reverting to old logic to prevent mismatch, assuming FE guests array includes children data fields.
-        
-        # NOTE: The previous logic assumed the FE Guest array included guests corresponding to children too, 
-        # which is incorrect for hotel reservations typically. However, based on the previous FE:
-        # total_capacity_count += total_capacity_count (includes base capacity adults + extra adults)
-        # The FE's previous logic: `totalGuestsCount = sum (room.base_capacity + room.adults + room.children)`
-        # The Guest list should match this count.
-        
+        # Rule 1: Validate total guests count (Adults + Children) - MUST BE KEPT
         total_expected_guests = total_capacity_count + sum(r.get('children', 0) * r.get('quantity', 1) for r in data['booking_rooms'])
 
         if len(data['guests']) != total_expected_guests:
              raise serializers.ValidationError(f"تعداد میهمانان ({len(data['guests'])}) باید با ظرفیت کل رزرو شده ({total_expected_guests}) برابر باشد.")
 
-        # Rule 2: Validate principal guest (First guest)
+        # Rule 2: Validate principal guest (First guest) - ALL FIELDS ARE MANDATORY FOR THIS GUEST
         if not data['guests']:
              raise serializers.ValidationError("حداقل یک میهمان (رزرو کننده) باید وجود داشته باشد.")
 
         principal_guest_data = data['guests'][0]
 
-        # Name and Phone are always mandatory for principal guest
+        # Name, Last Name and Phone are always mandatory for principal guest
         if not principal_guest_data.get('first_name') or not principal_guest_data.get('last_name') or not principal_guest_data.get('phone_number'):
             raise serializers.ValidationError({"guests": ["اطلاعات نام، نام خانوادگی و شماره تماس رزرو کننده (نفر اول) الزامی است."]})
 
@@ -141,13 +183,9 @@ class CreateBookingAPISerializer(serializers.Serializer):
             # National ID is mandatory for domestic principal guest
             raise serializers.ValidationError({"guests": ["کد ملی رزرو کننده (نفر اول) برای میهمانان ایرانی الزامی است."]})
         
-        # Rule 3: Validation for secondary guests (only name/last name are strictly mandatory at minimum)
-        for i, guest_data in enumerate(data['guests'][1:], start=1):
-            if not guest_data.get('first_name') or not guest_data.get('last_name'):
-                 raise serializers.ValidationError({"guests": [f"نام و نام خانوادگی میهمان شماره {i+1} الزامی است."]})
+        # Rule 3: Validation for secondary guests (REMOVED) - Only Rule 1 & 2 are enforced.
 
         return data
-
 
 
 class BookingRoomQuoteSerializer(serializers.Serializer):
