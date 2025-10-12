@@ -1,16 +1,13 @@
 # reservations/serializers.py
-# version: 1.1.7
-# CRITICAL FIX: Removed 'payment_method' from BookingDetailSerializer.Meta.fields as it does not exist on the Booking model.
-#               Ensured all previous fixes for optional guests and detail serializers are present.
+# version: 1.1.8
+# Feature: Added serializers for OfflineBank and PaymentConfirmation to support offline payment submission flow.
 
 from rest_framework import serializers
-from .models import Guest, Booking, BookingRoom
+from .models import Guest, Booking, BookingRoom, OfflineBank, PaymentConfirmation # Added new models
 from hotels.models import RoomType
-# Note: Assuming hotels.serializers is importable if needed for BoardTypeSerializer
-# from hotels.serializers import BoardTypeSerializer 
 
 
-# --- Detail Serializers for Read Operations ---
+# --- Detail Serializers for Read Operations (Kept) ---
 
 class GuestDetailSerializer(serializers.ModelSerializer):
     """Serializer for displaying full guest details (Read-Only)."""
@@ -46,13 +43,59 @@ class BookingDetailSerializer(serializers.ModelSerializer):
         fields = [
             'booking_code', 'hotel_name', 'check_in', 'check_out', 'total_price', 
             'status', 'created_at', 'updated_at', 'total_guests',
-            'booking_rooms', 'guests', # CRITICAL FIX: Removed 'payment_method' 
+            'booking_rooms', 'guests', 
         ]
         read_only_fields = fields 
 
     def get_total_guests(self, obj):
-        # Calculate total number of actual guests recorded
         return obj.guests.count()
+
+
+# --- NEW Offline Payment Serializers ---
+
+class OfflineBankSerializer(serializers.ModelSerializer):
+    """Serializer for listing active bank accounts for user reference."""
+    class Meta:
+        model = OfflineBank
+        fields = ['id', 'bank_name', 'account_holder', 'account_number', 'card_number']
+
+
+class PaymentConfirmationSerializer(serializers.ModelSerializer):
+    """Serializer for submitting payment confirmation details by the user."""
+    booking_code = serializers.CharField(write_only=True, required=True, max_length=8)
+    
+    class Meta:
+        model = PaymentConfirmation
+        fields = [
+            'booking_code', 'offline_bank', 'tracking_code', 
+            'payment_date', 'payment_amount'
+        ]
+        extra_kwargs = {
+            'offline_bank': {'error_messages': {'does_not_exist': 'حساب بانکی مورد نظر یافت نشد یا فعال نیست.'}},
+            'payment_date': {'input_formats': ['%Y-%m-%d %H:%M:%S']} # Specify format for API input
+        }
+
+    def validate(self, data):
+        """Custom validation to ensure the booking exists and is pending."""
+        booking_code = data['booking_code']
+        try:
+            booking = Booking.objects.get(booking_code=booking_code, status='pending')
+        except Booking.DoesNotExist:
+            raise serializers.ValidationError({"booking_code": "رزرو با این کد یافت نشد یا در وضعیت در انتظار پرداخت نیست."})
+        
+        # Check if confirmation already exists (OneToOne field check)
+        if PaymentConfirmation.objects.filter(booking=booking).exists():
+             raise serializers.ValidationError({"booking_code": "اطلاعات پرداخت برای این رزرو قبلاً ثبت شده است."})
+        
+        data['booking'] = booking
+        return data
+
+    def create(self, validated_data):
+        """Create PaymentConfirmation instance and link it to the Booking."""
+        booking = validated_data.pop('booking')
+        validated_data.pop('booking_code') # Remove unnecessary write-only field
+        
+        return PaymentConfirmation.objects.create(booking=booking, **validated_data)
 
 
 # --- Write/Input Serializers ---

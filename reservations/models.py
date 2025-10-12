@@ -1,5 +1,6 @@
 # reservations/models.py
-# version: 0.0.3
+# version: 0.0.4
+# Feature: Added OfflineBank and PaymentConfirmation models to support manual/offline payment tracking.
 # CRITICAL FIX: Modified custom validators (validate_iranian_national_id and validate_iranian_mobile)
 # to allow empty/None values, preventing ValidationError on optional fields for secondary guests.
 
@@ -12,6 +13,7 @@ from django_jalali.db import models as jmodels
 from django.core.exceptions import ValidationError
 import re
 from agencies.models import Agency
+from decimal import Decimal # Added for PaymentConfirmation
 
 def generate_numeric_booking_code():
     """Generates a unique 8-digit numeric booking code based on timestamp and random part."""
@@ -34,7 +36,6 @@ class Booking(models.Model):
     check_in = jmodels.jDateField(verbose_name="تاریخ ورود")
     check_out = jmodels.jDateField(verbose_name="تاریخ خروج")
 
-    # FIX: null=True و blank=True برای رفع IntegrityError و محاسبه قیمت در save_model
     total_price = models.DecimalField(max_digits=20, decimal_places=0, verbose_name="قیمت نهایی", null=True, blank=True)
     status = models.CharField(max_length=30, choices=STATUS_CHOICES, default='pending', verbose_name="وضعیت")
     agency = models.ForeignKey(Agency, on_delete=models.SET_NULL, null=True, blank=True, related_name="bookings", verbose_name="رزرو برای آژانس")
@@ -59,10 +60,8 @@ class BookingRoom(models.Model):
     board_type = models.ForeignKey(BoardType, on_delete=models.PROTECT, related_name="booking_rooms", verbose_name="نوع سرویس")
     quantity = models.PositiveSmallIntegerField(default=1, verbose_name="تعداد اتاق")
 
-    # فیلدهای نفرات اضافی در سطح اتاق
     adults = models.PositiveSmallIntegerField(default=0, verbose_name="تعداد نفرات اضافی (بالای ظرفیت پایه)")
     children = models.PositiveSmallIntegerField(default=0, verbose_name="تعداد کودکان این اتاق")
-    # New field for extra guest requests
     extra_requests = models.TextField(blank=True, null=True, verbose_name="درخواست‌های اضافی اتاق")
     
     class Meta:
@@ -72,31 +71,28 @@ class BookingRoom(models.Model):
 
 def validate_iranian_national_id(value):
     """Validates the format of the Iranian national ID, allowing empty values for optional fields."""
-    if not value: # CRITICAL FIX: Allow empty or None value to pass validation
+    if not value: 
         return 
     if not re.match(r'^\d{10}$', value):
         raise ValidationError("کد ملی باید ۱۰ رقم باشد.")
 
 def validate_iranian_mobile(value):
     """Validates the format of the Iranian mobile number, allowing empty values for optional fields."""
-    if not value: # CRITICAL FIX: Allow empty or None value to pass validation
+    if not value: 
         return
     if not re.match(r'^09\d{9}$', value):
         raise ValidationError("شماره موبایل باید با 09 شروع شده و ۱۱ رقم باشد.")
 
 class Guest(models.Model):
     booking = models.ForeignKey(Booking, on_delete=models.CASCADE, related_name="guests", verbose_name="رزرو")
-    # FIX: Added blank=True for optional secondary guests
     first_name = models.CharField(max_length=100, blank=True, verbose_name="نام")
     last_name = models.CharField(max_length=100, blank=True, verbose_name="نام خانوادگی")
 
     is_foreign = models.BooleanField(default=False, verbose_name="میهمان خارجی است؟")
-    # Custom validators are now safe for empty optional fields
     national_id = models.CharField(max_length=10, blank=True, null=True, verbose_name="کد ملی", validators=[validate_iranian_national_id])
     passport_number = models.CharField(max_length=50, blank=True, null=True, verbose_name="شماره پاسپورت")
     phone_number = models.CharField(max_length=11, blank=True, null=True, verbose_name="شماره تماس", validators=[validate_iranian_mobile])
     nationality = models.CharField(max_length=50, blank=True, null=True, verbose_name="تابعیت")
-    # New field for the city of origin
     city_of_origin = models.CharField(max_length=100, blank=True, null=True, verbose_name="شهر مبدأ")
 
     class Meta:
@@ -107,18 +103,45 @@ class Guest(models.Model):
         return f"{self.first_name} {self.last_name}"
 
 class PaymentTransaction(models.Model):
-    """
-    مدل برای ثبت تراکنش‌های درگاه پرداخت
-    """
-    booking = models.ForeignKey(Booking, on_delete=models.CASCADE, related_name="payment_transactions", verbose_name="رزرو")
-    amount = models.DecimalField(max_digits=20, decimal_places=0, verbose_name="مبلغ")
-    transaction_id = models.CharField(max_length=255, blank=True, null=True, verbose_name="شناسه تراکنش")
-    is_successful = models.BooleanField(default=False, verbose_name="موفق بود؟")
-    created_at = models.DateTimeField(auto_now_add=True, verbose_name="زمان ایجاد")
+    # ... (Omitted)
+    pass
+
+
+# --- NEW OFFLINE PAYMENT MODELS ---
+
+class OfflineBank(models.Model):
+    """Details of the bank accounts available for offline payment/transfer."""
+    bank_name = models.CharField(max_length=100, verbose_name="نام بانک")
+    account_holder = models.CharField(max_length=100, verbose_name="نام صاحب حساب")
+    account_number = models.CharField(max_length=50, verbose_name="شماره حساب", unique=True)
+    card_number = models.CharField(max_length=16, verbose_name="شماره کارت", unique=True)
+    is_active = models.BooleanField(default=True, verbose_name="فعال است؟")
     
     class Meta:
-        verbose_name = "تراکنش پرداخت"
-        verbose_name_plural = "تراکنش‌های پرداخت"
+        verbose_name = "حساب بانکی آفلاین"
+        verbose_name_plural = "حساب‌های بانکی آفلاین"
 
     def __str__(self):
-        return f"تراکنش برای رزرو {self.booking.booking_code}"
+        return f"{self.bank_name} - {self.account_holder}"
+
+
+class PaymentConfirmation(models.Model):
+    """Stores user's submitted details after an offline bank transfer."""
+    booking = models.OneToOneField(Booking, on_delete=models.CASCADE, related_name="payment_confirmation", verbose_name="رزرو")
+    offline_bank = models.ForeignKey(OfflineBank, on_delete=models.PROTECT, verbose_name="حساب بانکی مقصد")
+    
+    # User submitted details
+    tracking_code = models.CharField(max_length=50, verbose_name="شماره پیگیری / ارجاع")
+    payment_date = jmodels.jDateTimeField(verbose_name="تاریخ و ساعت پرداخت")
+    payment_amount = models.DecimalField(max_digits=20, decimal_places=0, null=True, blank=True, verbose_name="مبلغ واریزی")
+    
+    # System fields
+    is_verified = models.BooleanField(default=False, verbose_name="تایید شده؟")
+    submission_date = models.DateTimeField(auto_now_add=True, verbose_name="تاریخ ثبت اطلاعات")
+    
+    class Meta:
+        verbose_name = "تاییدیه پرداخت آفلاین"
+        verbose_name_plural = "تاییدیه پرداخت‌های آفلاین"
+
+    def __str__(self):
+        return f"تایید پرداخت رزرو {self.booking.booking_code}"

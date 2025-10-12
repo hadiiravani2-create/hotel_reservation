@@ -89,20 +89,3 @@ class MenuItem(models.Model):
     def __str__(self):
         return self.title
 
-
-class PaymentSettings(models.Model):
-    """
-    مدل برای ذخیره تنظیمات پرداخت دستی
-    """
-    bank_name = models.CharField(max_length=100, verbose_name="نام بانک")
-    account_number = models.CharField(max_length=50, verbose_name="شماره حساب")
-    card_number = models.CharField(max_length=16, verbose_name="شماره کارت")
-    sheba_number = models.CharField(max_length=24, verbose_name="شماره شبا")
-    is_active = models.BooleanField(default=True, verbose_name="فعال است؟")
-
-    class Meta:
-        verbose_name = "تنظیمات پرداخت"
-        verbose_name_plural = "تنظیمات پرداخت"
-
-    def __str__(self):
-        return f"تنظیمات پرداخت {self.bank_name}"

@@ -1,7 +1,7 @@
 # reservations/views.py
-# version: 2.0.5
-# Feature: Added BookingDetailAPIView to retrieve details of a single booking by booking_code, 
-#          supporting the new payment/checkout process structure.
+# version: 2.0.7
+# CRITICAL FIX: Implemented user assignment logic for unauthenticated users (Guest/Registration) 
+#               to prevent downstream 500 errors caused by booking.user=None dependencies.
 
 from rest_framework.views import APIView
 from rest_framework.response import Response
@@ -12,19 +12,23 @@ from decimal import Decimal
 from collections import defaultdict
 from django.core.exceptions import ValidationError
 from django.contrib.auth import get_user_model
-from django.shortcuts import get_object_or_404 # Needed for the new view
+from django.shortcuts import get_object_or_404 
+from rest_framework.exceptions import PermissionDenied 
+from django.db.models import ObjectDoesNotExist # Added for robust user fallback
 
 # --- Imports ---
-from .serializers import CreateBookingAPISerializer, BookingListSerializer, BookingDetailSerializer # Added BookingDetailSerializer
+from .serializers import (
+    CreateBookingAPISerializer, BookingListSerializer, BookingDetailSerializer,
+    OfflineBankSerializer, PaymentConfirmationSerializer 
+)
 from pricing.selectors import calculate_multi_booking_price
 from hotels.models import RoomType, BoardType
 from pricing.models import Availability
-from .models import Booking, Guest, BookingRoom
+from .models import Booking, Guest, BookingRoom, OfflineBank, PaymentConfirmation 
 from agencies.models import Agency, AgencyTransaction, AgencyUser
 from rest_framework.authentication import TokenAuthentication
 from rest_framework.permissions import AllowAny, IsAuthenticated 
 from django.utils.decorators import method_decorator
-from rest_framework.exceptions import PermissionDenied # Needed for the new view
 
 CustomUser = get_user_model()
 
@@ -32,7 +36,7 @@ CustomUser = get_user_model()
 class CreateBookingAPIView(APIView):
     """API view for creating a booking, supporting both authenticated users and guests."""
     authentication_classes = [TokenAuthentication]
-    permission_classes = [AllowAny] # Allow non-authenticated users (guests) to post
+    permission_classes = [AllowAny] 
 
     @transaction.atomic
     def post(self, request):
@@ -45,10 +49,45 @@ class CreateBookingAPIView(APIView):
         # Determine the booking user. Use request.user if authenticated, otherwise None (Guest Booking).
         user = request.user if request.user.is_authenticated else None
         agency = None
+        principal_guest_data = validated_data['guests'][0] # Principal guest data
+
+        # --- CRITICAL USER ASSIGNMENT LOGIC ---
+        if not user:
+            
+            # 1. SCENARIO: Guest Checkout with Registration Request (wants_to_register)
+            if principal_guest_data.get('wants_to_register'):
+                # Creating an inactive user (Ghost User) linked to the booking data. User sets password later.
+                try:
+                    # Assuming 'phone_number' is used as the unique username
+                    user_phone = principal_guest_data.get('phone_number')
+                    if user_phone:
+                         user = CustomUser.objects.create_user(
+                            username=user_phone,
+                            email=principal_guest_data.get('email', f"{user_phone}@guest.com"),
+                            first_name=principal_guest_data.get('first_name'),
+                            last_name=principal_guest_data.get('last_name'),
+                            is_active=False, # User must set password/confirm details to activate
+                            password=CustomUser.objects.make_random_password() # Placeholder password
+                        )
+                    # If phone is missing, registration is deferred or falls through to guest user.
+                except Exception:
+                    # If user creation fails (e.g., username already exists), fall through.
+                    pass
+                    
+            # 2. SCENARIO: Pure Guest Checkout or Failed Registration (user=None after attempt)
+            if not user:
+                try:
+                    # Fallback to a single, dedicated GUEST_USER account to prevent downstream 500 errors 
+                    # Note: You must ensure a user with username='guest_user' exists in the database.
+                    user = CustomUser.objects.get(username='guest_user')
+                except CustomUser.DoesNotExist:
+                    # If guest_user doesn't exist, final fallback is to user=None (model allows it).
+                    user = None
+        # --- END USER ASSIGNMENT LOGIC ---
 
         if validated_data.get('agency_id'):
             # Agency booking requires authentication
-            if not user:
+            if not user or user.username == 'guest_user': # Disallow guest user to book for an agency
                  return Response({"error": "برای رزرو آژانسی، ابتدا باید وارد حساب کاربری آژانس شوید."}, status=status.HTTP_403_FORBIDDEN)
             try:
                 agency = Agency.objects.get(id=validated_data['agency_id'])
@@ -95,7 +134,7 @@ class CreateBookingAPIView(APIView):
                 validated_data['booking_rooms'], 
                 check_in, 
                 check_out, 
-                user # Pass the determined user (authenticated or None) for pricing calculation
+                user # Pass the determined user (authenticated or None/guest_user) for pricing calculation
             )
             
             if price_data is None:
@@ -105,15 +144,12 @@ class CreateBookingAPIView(APIView):
 
             # Create Booking
             booking = Booking.objects.create(
-                user=user, # Set to authenticated user or None
+                user=user, # Set to authenticated user or assigned fallback
                 agency=agency,
                 check_in=check_in,
                 check_out=check_out,
                 status='pending',
                 total_price=total_price,
-                # NOTE: payment_method is NOT a field on the Booking model. It is only on the serializer. 
-                # This field should be passed to the payment view if needed, but is not stored on the booking object itself. 
-                # We are removing the reliance on payment_method here.
             )
             
             # Create BookingRooms and update availability
@@ -154,7 +190,6 @@ class CreateBookingAPIView(APIView):
             status=status.HTTP_201_CREATED
         )
 
-
 class BookingDetailAPIView(APIView):
     """Retrieves details of a single booking by booking_code for payment/review page."""
     authentication_classes = [TokenAuthentication]
@@ -164,10 +199,6 @@ class BookingDetailAPIView(APIView):
         booking = get_object_or_404(Booking, booking_code=booking_code)
         
         # Authorization check: 
-        # 1. Booking must be pending.
-        # OR
-        # 2. User must be logged in AND own the booking (or be an authorized agency user).
-        
         is_owner_or_agency = False
         if request.user.is_authenticated:
             is_owner_or_agency = (booking.user == request.user)
@@ -175,9 +206,6 @@ class BookingDetailAPIView(APIView):
                 agency_user = booking.agency.agency_users.filter(user=request.user).exists()
                 is_owner_or_agency = is_owner_or_agency or agency_user
         
-        # Logic: If booking is confirmed/cancelled, only the owner can see it. 
-        # If booking is pending, anyone who knows the code can potentially see it (for guest booking payment flow), 
-        # but we should restrict confirmed/processed bookings.
         if booking.status != 'pending' and not is_owner_or_agency:
              raise PermissionDenied("شما اجازه دسترسی به جزئیات این رزرو را ندارید.")
         
@@ -185,8 +213,41 @@ class BookingDetailAPIView(APIView):
         return Response(serializer.data, status=status.HTTP_200_OK)
 
 
+# --- NEW OFFLINE PAYMENT VIEWS ---
+
+class OfflineBankListAPIView(generics.ListAPIView):
+    """API view to list active offline bank accounts for reference."""
+    queryset = OfflineBank.objects.filter(is_active=True)
+    serializer_class = OfflineBankSerializer
+    authentication_classes = [TokenAuthentication]
+    permission_classes = [AllowAny]
+
+
+class PaymentConfirmationAPIView(APIView):
+    """API view for submitting payment confirmation details (tracking code, date/time)."""
+    authentication_classes = [TokenAuthentication]
+    permission_classes = [AllowAny] # Allow guests to submit confirmation
+
+    def post(self, request):
+        serializer = PaymentConfirmationSerializer(data=request.data)
+        
+        if not serializer.is_valid():
+            return Response(serializer.errors, status=status.HTTP_400_BAD_REQUEST)
+
+        # Saves the PaymentConfirmation record and links it to the Booking
+        confirmation = serializer.save()
+        
+        # Optional: Send notification to admin/finance team about the new manual payment confirmation
+        # send_admin_notification(confirmation) 
+        
+        return Response({
+            "success": True, 
+            "message": "اطلاعات پرداخت شما با موفقیت ثبت شد و در حال بررسی است. نتیجه از طریق ایمیل/پیامک اطلاع‌رسانی خواهد شد.", 
+            "confirmation_id": confirmation.id
+        }, status=status.HTTP_201_CREATED)
+
+
 class MyBookingsAPIView(generics.ListAPIView):
-    # ... (Omitted)
     """API view for authenticated users to list their bookings."""
     serializer_class = BookingListSerializer
     authentication_classes = [TokenAuthentication]
@@ -203,7 +264,6 @@ class MyBookingsAPIView(generics.ListAPIView):
 
 
 class BookingRequestAPIView(APIView):
-    # ... (Omitted)
     """API view to request cancellation or modification of a booking."""
     authentication_classes = [TokenAuthentication]
     permission_classes = [IsAuthenticated]
@@ -237,7 +297,6 @@ class BookingRequestAPIView(APIView):
 
 
 class InitiatePaymentAPIView(APIView):
-    # ... (Omitted)
     """API view to initiate payment for a pending booking."""
     authentication_classes = [TokenAuthentication]
     permission_classes = [IsAuthenticated]
@@ -257,7 +316,6 @@ class InitiatePaymentAPIView(APIView):
         })
 
 class VerifyPaymentAPIView(APIView):
-    # ... (Omitted)
     """API view to verify payment status and confirm booking."""
     authentication_classes = [TokenAuthentication]
     permission_classes = [IsAuthenticated]
