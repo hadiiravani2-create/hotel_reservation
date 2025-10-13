@@ -1,6 +1,8 @@
 # reservations/serializers.py
-# version: 1.1.8
-# Feature: Added serializers for OfflineBank and PaymentConfirmation to support offline payment submission flow.
+# version: 1.2.2
+# Feature: Added GuestBookingLookupSerializer for unauthenticated booking tracking by code and national ID.
+# FIX: Ensured case-insensitive comparison (using .upper()) for national_id and passport_number 
+#      to prevent lookup failures due to case mismatches in the database or user input.
 
 from rest_framework import serializers
 from .models import Guest, Booking, BookingRoom, OfflineBank, PaymentConfirmation # Added new models
@@ -49,6 +51,61 @@ class BookingDetailSerializer(serializers.ModelSerializer):
 
     def get_total_guests(self, obj):
         return obj.guests.count()
+
+
+# --- NEW Booking Lookup Serializer for Guests ---
+
+class GuestBookingLookupSerializer(serializers.Serializer):
+    """Serializer for validating booking lookup data (code + ID)."""
+    booking_code = serializers.CharField(required=True, max_length=8)
+    # national_id is used for Iranian guests, passport_number for foreign guests
+    national_id = serializers.CharField(required=False, allow_blank=True, max_length=10) 
+    passport_number = serializers.CharField(required=False, allow_blank=True, max_length=50)
+
+    def validate(self, data):
+        booking_code = data.get('booking_code')
+        
+        # FIX: Normalize inputs to stripped, uppercase strings for robust comparison
+        input_national_id = (data.get('national_id') or '').strip().upper()
+        input_passport_number = (data.get('passport_number') or '').strip().upper()
+
+        if not input_national_id and not input_passport_number:
+            raise serializers.ValidationError("وارد کردن کد ملی یا شماره پاسپورت الزامی است.")
+
+        try:
+            # 1. Find the booking
+            booking = Booking.objects.get(booking_code=booking_code)
+        except Booking.DoesNotExist:
+            raise serializers.ValidationError({"booking_code": "کد رزرو وارد شده نامعتبر است."})
+        
+        # 2. Check the principal guest (first guest in the reservation)
+        principal_guest = booking.guests.order_by('id').first()
+        if not principal_guest:
+            raise serializers.ValidationError("رزرو یافت شده فاقد میهمان اصلی است. با پشتیبانی تماس بگیرید.")
+        
+        # 3. Validation based on guest type
+        is_foreign_lookup = bool(input_passport_number)
+
+        if is_foreign_lookup and principal_guest.is_foreign:
+             # Foreign Guest Check: Compare stripped and upper-cased input with DB value
+             db_passport = (principal_guest.passport_number or '').strip().upper()
+             
+             if db_passport != input_passport_number:
+                 raise serializers.ValidationError({"passport_number": "شماره پاسپورت وارد شده با میهمان اصلی مطابقت ندارد."})
+        
+        elif not is_foreign_lookup and not principal_guest.is_foreign:
+            # Domestic Guest Check: Compare stripped and upper-cased input with DB value
+            db_national_id = (principal_guest.national_id or '').strip().upper()
+            
+            if db_national_id != input_national_id:
+                 raise serializers.ValidationError({"national_id": "کد ملی وارد شده با میهمان اصلی مطابقت ندارد."})
+        
+        else:
+             # Mismatch between lookup type and actual guest type
+             raise serializers.ValidationError("نوع مدرک شناسایی (کد ملی/پاسپورت) با نوع میهمان اصلی رزرو شده مطابقت ندارد.")
+             
+        data['booking'] = booking
+        return data
 
 
 # --- NEW Offline Payment Serializers ---

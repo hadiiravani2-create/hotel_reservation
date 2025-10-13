@@ -1,9 +1,10 @@
 # reservations/admin.py
-# version: 1.0.1
-# Feature: Registered OfflineBank and PaymentConfirmation models for admin access.
+# version: 1.0.2
+# FIX: Added check for obj.agency existence before creating AgencyTransaction to prevent IntegrityError
+#      on confirming non-agency bookings in Django Admin.
 
 from django.contrib import admin
-from .models import Booking, Guest, BookingRoom, OfflineBank, PaymentConfirmation # CRITICAL: Added new models
+from .models import Booking, Guest, BookingRoom, OfflineBank, PaymentConfirmation 
 from .forms import BookingForm
 from agencies.models import AgencyTransaction
 from django.db.models import Sum
@@ -48,7 +49,6 @@ class BookingAdmin(admin.ModelAdmin):
         return self.readonly_fields
 
     def save_model(self, request, obj, form, change):
-        # ... (Unchanged implementation for Booking save_model logic)
         old_obj = None
         if obj.pk:
             old_obj = Booking.objects.get(pk=obj.pk)
@@ -139,14 +139,16 @@ class BookingAdmin(admin.ModelAdmin):
         
         # Status Change Logic
         if obj.pk and old_obj and old_obj.status == 'pending' and obj.status == 'confirmed':
-             AgencyTransaction.objects.create(
-                 agency=obj.agency,
-                 booking=obj,
-                 amount=obj.total_price,
-                 transaction_type='payment',
-                 created_by=request.user,
-                 description=f"پرداخت دستی رزرو کد {obj.booking_code} توسط ادمین"
-             )
+            # FIX: Only create AgencyTransaction if the booking is linked to an agency
+            if obj.agency: 
+                 AgencyTransaction.objects.create(
+                     agency=obj.agency,
+                     booking=obj,
+                     amount=obj.total_price,
+                     transaction_type='payment',
+                     created_by=request.user,
+                     description=f"پرداخت دستی رزرو کد {obj.booking_code} توسط ادمین"
+                 )
 
     def save_formset(self, request, form, formset, change):
         # این متد باید برای ذخیره واقعی فرمست‌ها فراخوانی شود
@@ -171,6 +173,3 @@ class PaymentConfirmationAdmin(admin.ModelAdmin):
     search_fields = ('booking__booking_code', 'tracking_code')
     readonly_fields = ('booking', 'tracking_code', 'payment_date', 'payment_amount', 'offline_bank', 'submission_date')
     list_editable = ('is_verified',) # Allows admin to quickly verify the payment
-
-# Note: BookingRoom and Guest models are implicitly registered via inlines or explicitly if not used as inlines.
-# We ensure the required models are imported at the top.

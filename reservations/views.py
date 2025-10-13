@@ -1,5 +1,5 @@
 # reservations/views.py
-# version: 2.0.7
+# version: 2.0.8
 # CRITICAL FIX: Implemented user assignment logic for unauthenticated users (Guest/Registration) 
 #               to prevent downstream 500 errors caused by booking.user=None dependencies.
 
@@ -14,12 +14,13 @@ from django.core.exceptions import ValidationError
 from django.contrib.auth import get_user_model
 from django.shortcuts import get_object_or_404 
 from rest_framework.exceptions import PermissionDenied 
-from django.db.models import ObjectDoesNotExist # Added for robust user fallback
+from django.db.models import ObjectDoesNotExist, Q # Added Q for OR logic in queryset filtering
 
 # --- Imports ---
 from .serializers import (
     CreateBookingAPISerializer, BookingListSerializer, BookingDetailSerializer,
-    OfflineBankSerializer, PaymentConfirmationSerializer 
+    OfflineBankSerializer, PaymentConfirmationSerializer,
+    GuestBookingLookupSerializer
 )
 from pricing.selectors import calculate_multi_booking_price
 from hotels.models import RoomType, BoardType
@@ -165,7 +166,7 @@ class CreateBookingAPIView(APIView):
                 )
 
                 for date in date_range:
-                    availability_obj = availability_map[(room_data['room_type_id'], date)]
+                    availability_obj = availability_map[(room_type_id, date)]
                     availability_obj.quantity -= room_data['quantity']
                     availability_obj.save()
 
@@ -203,7 +204,8 @@ class BookingDetailAPIView(APIView):
         if request.user.is_authenticated:
             is_owner_or_agency = (booking.user == request.user)
             if booking.agency:
-                agency_user = booking.agency.agency_users.filter(user=request.user).exists()
+                # FIX: Corrected related_name from agency_users to profiles for AgencyUser model lookup
+                agency_user = booking.agency.profiles.filter(user=request.user).exists()
                 is_owner_or_agency = is_owner_or_agency or agency_user
         
         if booking.status != 'pending' and not is_owner_or_agency:
@@ -212,6 +214,26 @@ class BookingDetailAPIView(APIView):
         serializer = BookingDetailSerializer(booking)
         return Response(serializer.data, status=status.HTTP_200_OK)
 
+class GuestBookingLookupAPIView(APIView):
+    """
+    Allows unregistered guests to securely look up their booking using the booking code and principal guest ID/Passport.
+    This bypasses the strict authorization check in BookingDetailAPIView for confirmed bookings.
+    """
+    permission_classes = [AllowAny]
+    
+    def post(self, request):
+        serializer = GuestBookingLookupSerializer(data=request.data)
+        
+        if not serializer.is_valid():
+            return Response(serializer.errors, status=status.HTTP_400_BAD_REQUEST)
+        
+        booking = serializer.validated_data['booking']
+        
+        # Now that the user is authenticated via code + ID, return the details.
+        # Note: We do not need the full authorization check here because validation already confirmed identity.
+        detail_serializer = BookingDetailSerializer(booking)
+        
+        return Response(detail_serializer.data, status=status.HTTP_200_OK)
 
 # --- NEW OFFLINE PAYMENT VIEWS ---
 
@@ -256,10 +278,19 @@ class MyBookingsAPIView(generics.ListAPIView):
     def get_queryset(self):
         user = self.request.user
         agency_profile = user.agency_profile if hasattr(user, 'agency_profile') else None
+        
+        # FIX: Ensure agency users also see their personal bookings (user=user)
         if agency_profile and agency_profile.agency:
-            # Return agency bookings if user is linked to an agency
-            return Booking.objects.filter(agency=agency_profile.agency)
-        # Otherwise, return personal bookings
+            # Agency users see bookings they created OR all bookings for their agency
+            agency = agency_profile.agency
+            # Filter for bookings where the user is the creator (user=user) 
+            # OR the booking belongs to their agency (agency=agency)
+            return Booking.objects.filter(
+                Q(user=user) | Q(agency=agency)
+            ).distinct()
+            
+        # Otherwise, return personal bookings (made by this user, without an agency association)
+        # The agency__isnull=True filter is kept for consistency with the original logic for non-agency users.
         return Booking.objects.filter(user=user, agency__isnull=True)
 
 

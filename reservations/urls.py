@@ -1,13 +1,14 @@
 # reservations/urls.py
-# version: 1.0.3
-# Feature: Added URLs for offline payment flow (bank list and confirmation submission).
+# version: 1.0.4
+# Feature: Added URL for GuestBookingLookupAPIView to allow unregistered users to track confirmed bookings.
 
 from django.urls import path
 from .views import (
     CreateBookingAPIView, MyBookingsAPIView, BookingRequestAPIView, InitiatePaymentAPIView, VerifyPaymentAPIView, 
     BookingDetailAPIView,
     # NEW VIEWS
-    OfflineBankListAPIView, PaymentConfirmationAPIView 
+    OfflineBankListAPIView, PaymentConfirmationAPIView,
+    GuestBookingLookupAPIView # NEW IMPORT
 )
 from rest_framework import routers
 
@@ -17,6 +18,9 @@ urlpatterns = [
     # Main Booking Flow
     path('bookings/', CreateBookingAPIView.as_view(), name='booking-create'),
     path('bookings/<str:booking_code>/details/', BookingDetailAPIView.as_view(), name='booking-details'),
+    
+    # NEW GUEST TRACKING PATH
+    path('guest-lookup/', GuestBookingLookupAPIView.as_view(), name='guest-booking-lookup'),
     
     # NEW OFFLINE PAYMENT FLOW
     path('offline-banks/', OfflineBankListAPIView.as_view(), name='offline-bank-list'),
