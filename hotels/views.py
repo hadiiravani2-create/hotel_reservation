@@ -1,6 +1,6 @@
 # hotels/views.py
-# version: 0.1
-# This file defines the API views for the hotels application.
+# version: 0.1.1
+# FEATURE: Added SuggestedHotelListAPIView to serve homepage hotel data.
 
 from rest_framework import generics, viewsets
 from rest_framework.response import Response
@@ -12,7 +12,8 @@ from .models import (
 from .serializers import (
     CitySerializer, HotelSerializer, AmenitySerializer,
     RoomTypeSerializer, TouristAttractionSerializer,
-    HotelCategorySerializer, BedTypeSerializer, RoomCategorySerializer
+    HotelCategorySerializer, BedTypeSerializer, RoomCategorySerializer,
+    SuggestedHotelSerializer # Import the new serializer
 )
 from django.shortcuts import get_object_or_404
 from rest_framework.views import APIView
@@ -34,7 +35,7 @@ class HotelListAPIView(generics.ListAPIView):
 class HotelDetailAPIView(generics.RetrieveAPIView):
     queryset = Hotel.objects.all()
     serializer_class = HotelSerializer
-    lookup_field = 'slug' # Corresponds to <int:hotel_id> in URL
+    lookup_field = 'slug' 
 
 class RoomTypeListAPIView(generics.ListAPIView):
     serializer_class = RoomTypeSerializer
@@ -45,7 +46,15 @@ class RoomTypeListAPIView(generics.ListAPIView):
 class RoomTypeDetailAPIView(generics.RetrieveAPIView):
     queryset = RoomType.objects.all()
     serializer_class = RoomTypeSerializer
-    lookup_field = 'room_type_id' # Corresponds to <int:room_type_id> in URL
+    lookup_field = 'room_type_id'
+
+# New view for suggested hotels
+class SuggestedHotelListAPIView(generics.ListAPIView):
+    """
+    API view to retrieve a list of hotels marked as 'suggested' for the homepage.
+    """
+    queryset = Hotel.objects.filter(is_suggested=True)
+    serializer_class = SuggestedHotelSerializer
 
 
 # --- Existing ViewSets (can be used for full CRUD with routers) ---
@@ -80,14 +89,11 @@ class HotelViewSet(viewsets.ModelViewSet):
     serializer_class = HotelSerializer
     lookup_field = 'slug'
 
-    # Override retrieve to pass date context to serializer
     def retrieve(self, request, *args, **kwargs):
         instance = self.get_object()
-        # Get query params for date-based pricing and availability
         check_in = request.query_params.get('check_in')
         duration = request.query_params.get('duration')
         
-        # Pass params to the serializer context
         context = self.get_serializer_context()
         context.update({
             'check_in': check_in,

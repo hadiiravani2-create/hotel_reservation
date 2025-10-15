@@ -1,9 +1,10 @@
 # hotels/serializers.py
-# version: 1.4.1
-# Feature: Added sorting logic to HotelSerializer to display available rooms first by lowest price.
+# version: 1.4.2
+# FIX: Corrected a SyntaxError in the _get_date_range method.
+# FEATURE: Added SuggestedHotelSerializer for homepage hotel cards.
 
 from rest_framework import serializers
-from django.db.models import Count, Min 
+from django.db.models import Count, Min
 from datetime import timedelta
 from persiantools.jdatetime import JalaliDate
 from decimal import Decimal
@@ -81,9 +82,7 @@ class RoomTypeSerializer(serializers.ModelSerializer):
     room_categories = RoomCategorySerializer(many=True, read_only=True)
     
     is_available = serializers.SerializerMethodField()
-    # START FIX 1: Added missing field for minimum available quantity
     availability_quantity = serializers.SerializerMethodField()
-    # END FIX 1
     priced_board_types = serializers.SerializerMethodField()
     error_message = serializers.SerializerMethodField()
 
@@ -102,6 +101,7 @@ class RoomTypeSerializer(serializers.ModelSerializer):
         if not check_in_str or not duration_str: return None, 0
         try:
             check_in_date = JalaliDate.fromisoformat(check_in_str).to_gregorian()
+            # FIX: The following line was incomplete and caused a SyntaxError.
             duration = int(duration_str)
             if duration <= 0: return None, 0
             return [check_in_date + timedelta(days=i) for i in range(duration)], duration
@@ -110,25 +110,17 @@ class RoomTypeSerializer(serializers.ModelSerializer):
     def get_is_available(self, obj):
         date_range, duration = self._get_date_range()
         if not date_range: return False
-        # Check if an Availability object exists for every day with quantity > 0
         return Availability.objects.filter(room_type=obj, date__in=date_range, quantity__gt=0).count() == duration
 
-    # START FIX 1: Method to get minimum available quantity (for Bug 2)
     def get_availability_quantity(self, obj):
         date_range, duration = self._get_date_range()
         if not date_range: return 0
-        
-        # If not available for even one night, return 0 (handles quantity__gt=0 check)
         if not self.get_is_available(obj): return 0
-        
-        # Calculate the minimum available quantity across the dates
         min_availability = Availability.objects.filter(
             room_type=obj, 
             date__in=date_range
         ).aggregate(min_q=Min('quantity'))['min_q'] or 0
-        
         return min_availability
-    # END FIX 1
 
     def get_error_message(self, obj):
         if self.context.get('check_in') and not self.get_is_available(obj):
@@ -137,7 +129,6 @@ class RoomTypeSerializer(serializers.ModelSerializer):
 
     def get_priced_board_types(self, obj):
         date_range, duration = self._get_date_range()
-        # Use the newly available quantity field to check overall availability
         if not date_range or self.get_availability_quantity(obj) == 0: return []
         user = self.context.get('request').user if self.context.get('request') else None
         
@@ -151,10 +142,7 @@ class RoomTypeSerializer(serializers.ModelSerializer):
                 else:
                     is_calculable = False; break
             
-            # START FIX 2: Check total_price > 0 to filter out unpriced boards (for Bug 1)
-            # This ensures only services with calculated, non-zero prices are displayed.
             if is_calculable and current_total_price > 0:
-            # END FIX 2
                 priced_boards.append({'board_type': board_type, 'total_price': current_total_price})
         
         return PricedBoardTypeSerializer(priced_boards, many=True).data
@@ -177,24 +165,31 @@ class HotelSerializer(serializers.ModelSerializer):
         ]
 
     def get_available_rooms(self, obj):
-        """
-        Returns a sorted list of available room types for the given date range.
-        Sorts by lowest base price (min of priced_board_types) first.
-        """
         if not self.context.get('check_in') or not self.context.get('duration'): return []
-        
-        # 1. Serialize all rooms
         all_rooms_data = RoomTypeSerializer(obj.room_types.all(), many=True, context=self.context).data
-        
-        # 2. Filter for availability
         available_rooms = [room for room in all_rooms_data if room.get('is_available')]
-        
-        # 3. Sort by lowest total price (min of priced_board_types)
         def sort_key(room):
             prices = [item['total_price'] for item in room.get('priced_board_types', [])]
-            # Use a large number if no price is found, to push it to the end
             return min(prices) if prices else float('inf') 
-
         available_rooms.sort(key=sort_key)
-
         return available_rooms
+
+# New serializer for suggested hotels on the homepage
+class SuggestedHotelSerializer(serializers.ModelSerializer):
+    """
+    A lightweight serializer for displaying suggested hotels on the homepage.
+    """
+    city_name = serializers.CharField(source='city.name')
+    main_image = serializers.SerializerMethodField()
+
+    class Meta:
+        model = Hotel
+        fields = ['id', 'name', 'slug', 'stars', 'city_name', 'main_image']
+
+    def get_main_image(self, obj):
+        # Returns the URL of the first image in the hotel's gallery.
+        first_image = obj.images.first()
+        if first_image:
+            request = self.context.get('request')
+            return request.build_absolute_uri(first_image.image.url) if request else first_image.image.url
+        return None

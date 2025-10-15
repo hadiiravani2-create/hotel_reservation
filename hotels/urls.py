@@ -1,22 +1,20 @@
-# hadiiravani2-create/hotel_reservation/hotel_reservation-ad5e9db0ffd7b2bcb0d9a71d3e529d79333b2de0/hotels/urls.py
-
-# v1.0.1
-
 # hotels/urls.py
+# version: 1.0.4
+# REFACTOR: Removed all prefixes (api/, hotels/) as they are now handled in the root URLconf.
 
 from django.urls import path
-
-from . import views  # FIX: Import the entire views module to prevent circular dependency.
+from . import views
 
 app_name = 'hotels'
 
 urlpatterns = [
-    # FIX: Reference views via the module namespace (e.g., views.CityListAPIView).
-    path('api/cities/', views.CityListAPIView.as_view(), name='city-list'),
-    path('api/amenities/', views.AmenityListAPIView.as_view(), name='amenity-list'),
-    path('api/hotels/', views.HotelListAPIView.as_view(), name='hotel-list'),
-    path('api/hotels/<slug:slug>/', views.HotelViewSet.as_view({'get': 'retrieve'}), name='hotel-detail'),
-    path('api/hotels/<int:hotel_id>/rooms/', views.RoomTypeListAPIView.as_view(), name='room-type-list'),
-    path('api/room-types/<int:room_type_id>/', views.RoomTypeDetailAPIView.as_view(), name='room-type-detail'),
-
+    # Paths are now relative to /api/hotels/
+    path('cities/', views.CityListAPIView.as_view(), name='city-list'),
+    path('amenities/', views.AmenityListAPIView.as_view(), name='amenity-list'),
+    path('suggested/', views.SuggestedHotelListAPIView.as_view(), name='suggested-hotel-list'),
+    path('<slug:slug>/', views.HotelViewSet.as_view({'get': 'retrieve'}), name='hotel-detail'),
+    path('<int:hotel_id>/rooms/', views.RoomTypeListAPIView.as_view(), name='room-type-list'),
+    
+    # Kept the generic list view for hotels if needed, though it's less common with slug-based details
+    path('', views.HotelListAPIView.as_view(), name='hotel-list'), 
 ]

@@ -1,6 +1,7 @@
 # hotels/admin.py
-# version 3
-# Fix: Added search_fields to related models for autocomplete functionality.
+# version: 3.0.1
+# FIX: Replaced autocomplete with filter_horizontal for better ManyToMany UX in HotelAdmin.
+# FEATURE: Added 'is_suggested' field to HotelAdmin for homepage management.
 
 from django.contrib import admin
 from django.urls import reverse
@@ -13,6 +14,15 @@ from .models import (
 class HotelImageInline(admin.TabularInline):
     model = HotelImage
     extra = 1
+    # Provides a read-only thumbnail of the image in the admin inline view.
+    readonly_fields = ('image_thumbnail',)
+    
+    def image_thumbnail(self, obj):
+        if obj.image:
+            return format_html('<img src="{}" width="150" height="auto" />', obj.image.url)
+        return "No Image"
+    image_thumbnail.short_description = 'Thumbnail'
+
 
 class RoomImageInline(admin.TabularInline):
     model = RoomImage
@@ -20,12 +30,17 @@ class RoomImageInline(admin.TabularInline):
 
 @admin.register(Hotel)
 class HotelAdmin(admin.ModelAdmin):
-    list_display = ('name', 'city', 'stars', 'manage_rooms_button')
-    list_filter = ('city', 'stars', 'hotel_categories')
+    list_display = ('name', 'city', 'stars', 'is_suggested', 'manage_rooms_button')
+    list_filter = ('city', 'stars', 'hotel_categories', 'is_suggested')
     search_fields = ('name', 'city__name')
     inlines = [HotelImageInline]
     prepopulated_fields = {'slug': ('name',)}
-    autocomplete_fields = ('city', 'amenities', 'hotel_categories')
+    
+    # Use autocomplete for ForeignKey with many options
+    autocomplete_fields = ('city',) 
+    
+    # Use filter_horizontal for a better ManyToMany selection interface
+    filter_horizontal = ('amenities', 'hotel_categories',)
 
     def manage_rooms_button(self, obj):
         # Creates a link to the RoomType list, filtered by the current hotel.
@@ -35,8 +50,7 @@ class HotelAdmin(admin.ModelAdmin):
         )
         return format_html('<a class="button" href="{}">مدیریت اتاق‌ها</a>', url)
     
-    manage_rooms_button.short_description = "مدیریت اتاق‌ها"
-    manage_rooms_button.allow_tags = True
+    manage_rooms_button.short_description = "اتاق‌ها"
 
 
 @admin.register(RoomType)
@@ -45,7 +59,9 @@ class RoomTypeAdmin(admin.ModelAdmin):
     list_filter = ('hotel', 'room_categories', 'bed_types')
     search_fields = ('name', 'hotel__name')
     inlines = [RoomImageInline]
-    autocomplete_fields = ('hotel', 'amenities', 'room_categories', 'bed_types')
+    
+    autocomplete_fields = ('hotel',)
+    filter_horizontal = ('amenities', 'room_categories', 'bed_types',)
 
     def manage_availability_button(self, obj):
         # Creates a link to the Availability list, filtered by the current room type.
@@ -53,10 +69,9 @@ class RoomTypeAdmin(admin.ModelAdmin):
             reverse("admin:pricing_availability_changelist")
             + f"?room_type__id__exact={obj.id}"
         )
-        return format_html('<a class="button" href="{}" style="background-color: #28a745;">مدیریت موجودی</a>', url)
+        return format_html('<a class="button" href="{}" style="background-color: #28a745;">موجودی</a>', url)
 
     manage_availability_button.short_description = "موجودی"
-    manage_availability_button.allow_tags = True
     
     def manage_prices_button(self, obj):
         # Creates a link to the Price list, filtered by the current room type.
@@ -64,10 +79,9 @@ class RoomTypeAdmin(admin.ModelAdmin):
             reverse("admin:pricing_price_changelist")
             + f"?room_type__id__exact={obj.id}"
         )
-        return format_html('<a class="button" href="{}" style="background-color: #ffc107; color: #212529;">مدیریت قیمت</a>', url)
+        return format_html('<a class="button" href="{}" style="background-color: #ffc107; color: #212529;">قیمت‌گذاری</a>', url)
 
     manage_prices_button.short_description = "قیمت‌گذاری"
-    manage_prices_button.allow_tags = True
 
 
 @admin.register(City)
@@ -100,3 +114,5 @@ class BoardTypeAdmin(admin.ModelAdmin):
     search_fields = ('name', 'code')
 
 admin.site.register(TouristAttraction)
+admin.site.register(HotelImage)
+admin.site.register(RoomImage)

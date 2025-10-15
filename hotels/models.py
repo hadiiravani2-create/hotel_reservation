@@ -1,5 +1,6 @@
 # hotels/models.py
-# version 1
+# version: 1.0.1
+# FEATURE: Added 'is_suggested' field to Hotel model for homepage display.
 
 from django.db import models
 from django.conf import settings
@@ -116,6 +117,7 @@ class Hotel(models.Model):
     city = models.ForeignKey(City, on_delete=models.PROTECT, related_name="hotels", verbose_name="شهر")
     amenities = models.ManyToManyField(Amenity, blank=True, verbose_name="امکانات رفاهی")
     hotel_categories = models.ManyToManyField(HotelCategory, blank=True, related_name="hotels", verbose_name="دسته‌بندی‌ها")
+    is_suggested = models.BooleanField(default=False, verbose_name="هتل پیشنهادی")
     meta_title = models.CharField(max_length=255, blank=True, null=True, verbose_name="عنوان سئو")
     meta_description = models.TextField(blank=True, null=True, verbose_name="توضیحات سئو")
     latitude = models.DecimalField(max_digits=9, decimal_places=6, null=True, blank=True, verbose_name="عرض جغرافیایی")
