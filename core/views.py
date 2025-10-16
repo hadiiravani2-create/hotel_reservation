@@ -1,16 +1,23 @@
 # core/views.py
-# version: 1.0.1
+# version: 1.0.2
+# FEATURE: Added UserWalletDetailAPIView to fetch user wallet information.
+
 from rest_framework.views import APIView
 from rest_framework.response import Response
 from rest_framework import status, generics
 from rest_framework.authtoken.models import Token
 from django.shortcuts import get_object_or_404
+from rest_framework.permissions import IsAuthenticated
+from rest_framework.authentication import TokenAuthentication
 
 # ایمپورت‌های مدل‌ها
-from .models import SiteSettings, Menu, CustomUser 
+from .models import SiteSettings, Menu, CustomUser, Wallet
 
 # ایمپورت سریالایزرها
-from .serializers import SiteSettingsSerializer, MenuItemSerializer, UserRegisterSerializer, UserLoginSerializer, UserAuthSerializer, MenuSerializer # ADDED: UserLoginSerializer, UserAuthSerializer
+from .serializers import (
+    SiteSettingsSerializer, MenuItemSerializer, UserRegisterSerializer, 
+    UserLoginSerializer, UserAuthSerializer, MenuSerializer, WalletSerializer
+)
 
 class SiteSettingsAPIView(APIView):
     """API view to fetch site settings."""
@@ -25,13 +32,8 @@ class SiteSettingsAPIView(APIView):
 class MenuView(APIView):
     """API view to fetch a specific menu and its nested items."""
     def get(self, request, menu_slug):
-        # Find the menu by its slug
         menu = get_object_or_404(Menu, slug=menu_slug)
-        
-        # Get all related items for that menu
         menu_items = menu.items.all()
-        
-        # Serialize the list of items directly
         serializer = MenuItemSerializer(menu_items, many=True)
         return Response(serializer.data)
 
@@ -48,8 +50,6 @@ class UserRegisterAPIView(generics.CreateAPIView):
         
         user = serializer.instance 
         token, created = Token.objects.get_or_create(user=user)
-        
-        # UserAuthSerializer is implicitly called inside UserRegisterSerializer.to_representation
         user_data = serializer.data
         
         return Response({
@@ -57,23 +57,35 @@ class UserRegisterAPIView(generics.CreateAPIView):
             'user': user_data,
         }, status=status.HTTP_201_CREATED)
 
-# NEW CLASS: API view for user login
+
 class UserLoginAPIView(APIView):
     """API view for user login and returning token."""
     def post(self, request):
         serializer = UserLoginSerializer(data=request.data, context={'request': request})
         serializer.is_valid(raise_exception=True)
-        
-        # The validated user object is stored in serializer.validated_data['user']
         user = serializer.validated_data['user']
-        
-        # Get or create token for the authenticated user
         token, created = Token.objects.get_or_create(user=user)
-        
-        # Serialize user data using the dedicated Auth serializer
         user_data = UserAuthSerializer(user).data
         
         return Response({
             'token': token.key,
             'user': user_data,
         }, status=status.HTTP_200_OK)
+
+
+# --- NEW: Wallet API View ---
+
+class UserWalletDetailAPIView(APIView):
+    """
+    API view for retrieving the authenticated user's wallet details.
+    """
+    authentication_classes = [TokenAuthentication]
+    permission_classes = [IsAuthenticated]
+
+    def get(self, request):
+        # Retrieve the wallet for the authenticated user.
+        # The create_user_wallet signal ensures the wallet exists, but get_or_create is safer.
+        wallet, created = Wallet.objects.get_or_create(user=request.user)
+        
+        serializer = WalletSerializer(wallet)
+        return Response(serializer.data, status=status.HTTP_200_OK)

@@ -1,4 +1,6 @@
 # reservations/apps.py
+# version: 1.0.1
+# CLEANUP: Corrected comments and ensured signals are properly imported.
 
 from django.apps import AppConfig
 
@@ -7,4 +9,8 @@ class ReservationsConfig(AppConfig):
     name = 'reservations'
 
     def ready(self):
-        import reservations.signals # فایل سیگنال را وارد می‌کنیم تا شنونده‌ها فعال شوند
+        """
+        This method is called when the application is ready.
+        It's the standard place to import signals to ensure they are connected.
+        """
+        import reservations.signals
