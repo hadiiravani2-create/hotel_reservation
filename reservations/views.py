@@ -34,6 +34,40 @@ from django.utils.decorators import method_decorator
 
 CustomUser = get_user_model()
 
+class PayWithWalletAPIView(APIView):
+    """
+    Handles payment for a booking using the user's wallet balance.
+    """
+    authentication_classes = [TokenAuthentication]
+    permission_classes = [IsAuthenticated]
+
+    @transaction.atomic
+    def post(self, request, booking_code):
+        try:
+            booking = Booking.objects.get(booking_code=booking_code, user=request.user, status='pending')
+        except Booking.DoesNotExist:
+            return Response({"error": "رزرو یافت نشد یا در وضعیت مناسب برای پرداخت نیست."}, status=status.HTTP_404_NOT_FOUND)
+
+        wallet = get_object_or_404(Wallet, user=request.user)
+
+        if wallet.balance < booking.total_price:
+            return Response({"error": "موجودی کیف پول شما برای پرداخت این رزرو کافی نیست."}, status=status.HTTP_400_BAD_REQUEST)
+
+        # Create a wallet transaction for the payment
+        WalletTransaction.objects.create(
+            wallet=wallet,
+            transaction_type='payment',
+            amount=-booking.total_price,  # Negative amount for payment
+            status='completed',
+            booking=booking,
+            description=f"پرداخت هزینه رزرو شماره {booking.booking_code}"
+        )
+
+        # Update booking status to confirmed
+        booking.status = 'confirmed'
+        booking.save(update_fields=['status'])
+
+        return Response({"success": True, "message": "پرداخت با موفقیت انجام شد و رزرو شما تایید گردید."}, status=status.HTTP_200_OK)
 
 class CreateBookingAPIView(APIView):
     """API view for creating a booking, supporting both authenticated users and guests."""
