@@ -17,10 +17,10 @@ class WalletTransactionSerializer(serializers.ModelSerializer):
     """
     # Use get_..._display() for choice fields to show human-readable values.
     transaction_type = serializers.CharField(source='get_transaction_type_display')
-    
+    status = serializers.CharField(source='get_status_display') # ADDED: Get human-readable status
     class Meta:
         model = WalletTransaction
-        fields = ['id', 'transaction_type', 'amount', 'description', 'created_at']
+        fields = ['id', 'transaction_type', 'amount', 'status', 'description', 'created_at']
 
 
 class WalletSerializer(serializers.ModelSerializer):

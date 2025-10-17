@@ -25,6 +25,7 @@ from .serializers import (
 from pricing.selectors import calculate_multi_booking_price
 from hotels.models import RoomType, BoardType
 from pricing.models import Availability
+from core.models import WalletTransaction
 from .models import Booking, Guest, BookingRoom, OfflineBank, PaymentConfirmation 
 from agencies.models import Agency, AgencyTransaction, AgencyUser
 from rest_framework.authentication import TokenAuthentication
@@ -244,11 +245,10 @@ class OfflineBankListAPIView(generics.ListAPIView):
     authentication_classes = [TokenAuthentication]
     permission_classes = [AllowAny]
 
-
 class PaymentConfirmationAPIView(APIView):
-    """API view for submitting payment confirmation details (tracking code, date/time)."""
+    """API view for submitting payment confirmation details."""
     authentication_classes = [TokenAuthentication]
-    permission_classes = [AllowAny] # Allow guests to submit confirmation
+    permission_classes = [AllowAny]
 
     def post(self, request):
         serializer = PaymentConfirmationSerializer(data=request.data)
@@ -256,15 +256,31 @@ class PaymentConfirmationAPIView(APIView):
         if not serializer.is_valid():
             return Response(serializer.errors, status=status.HTTP_400_BAD_REQUEST)
 
-        # Saves the PaymentConfirmation record and links it to the Booking
         confirmation = serializer.save()
         
-        # Optional: Send notification to admin/finance team about the new manual payment confirmation
-        # send_admin_notification(confirmation) 
+        # --- START: New logic to enrich transaction description ---
+        # Check if the related object is a WalletTransaction
+        if isinstance(confirmation.content_object, WalletTransaction):
+            transaction = confirmation.content_object
+            bank_name = confirmation.offline_bank.bank_name
+            payment_time = confirmation.payment_date.strftime('%H:%M')
+            payment_date_jalali = jdatetime.fromgregorian(date=confirmation.payment_date).strftime('%Y/%m/%d')
+
+            # Create a rich, descriptive string
+            new_description = (
+                f"واریز به حساب بانک {bank_name} "
+                f"در تاریخ {payment_date_jalali} ساعت {payment_time}. "
+                f"شماره پیگیری: {confirmation.tracking_code}"
+            )
+            
+            # Update the transaction's description
+            transaction.description = new_description
+            transaction.save(update_fields=['description'])
+        # --- END: New logic ---
         
         return Response({
             "success": True, 
-            "message": "اطلاعات پرداخت شما با موفقیت ثبت شد و در حال بررسی است. نتیجه از طریق ایمیل/پیامک اطلاع‌رسانی خواهد شد.", 
+            "message": "اطلاعات پرداخت شما با موفقیت ثبت شد و در حال بررسی است.", 
             "confirmation_id": confirmation.id
         }, status=status.HTTP_201_CREATED)
 

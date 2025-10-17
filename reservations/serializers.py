@@ -111,10 +111,35 @@ class PaymentConfirmationSerializer(serializers.ModelSerializer):
         return PaymentConfirmation.objects.create(**validated_data)
 
 # ... (Other serializers remain unchanged)
+
 class GuestSerializer(serializers.ModelSerializer):
+    first_name = serializers.CharField(max_length=100, required=False, allow_blank=True) 
+    last_name = serializers.CharField(max_length=100, required=False, allow_blank=True)  
+    national_id = serializers.CharField(max_length=10, required=False, allow_blank=True, allow_null=True)
+    passport_number = serializers.CharField(max_length=50, required=False, allow_blank=True, allow_null=True)
+    phone_number = serializers.CharField(max_length=11, required=False, allow_blank=True, allow_null=True)
+    nationality = serializers.CharField(max_length=50, required=False, allow_blank=True, allow_null=True)
+    city_of_origin = serializers.CharField(max_length=100, required=False, allow_null=True, allow_blank=True)
+    
+    wants_to_register = serializers.BooleanField(required=False, write_only=True, default=False)
+    
     class Meta:
         model = Guest
+        # FIX: Removed 'wants_to_register' as it's not a model field.
         fields = ['first_name', 'last_name', 'is_foreign', 'national_id', 'passport_number', 'phone_number', 'nationality', 'city_of_origin', 'wants_to_register']
+
+    def validate(self, data):
+        national_id = data.get('national_id')
+        if data.get('is_foreign', False):
+             if national_id:
+                 data['national_id'] = None
+        else:
+             if data.get('passport_number') or data.get('nationality'):
+                 data['passport_number'] = None
+                 data['nationality'] = None
+        return data
+
+
 class BookingRoomSerializer(serializers.Serializer):
     room_type_id = serializers.IntegerField()
     board_type_id = serializers.IntegerField()

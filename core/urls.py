@@ -1,6 +1,6 @@
 # core/urls.py
-# version: 1.0.4
-# FEATURE: Added the API endpoint for fetching user wallet details.
+# version: 1.0.5
+# FEATURE: Added the API endpoint for initiating a wallet deposit.
 
 from django.urls import path
 from . import views
@@ -16,6 +16,7 @@ urlpatterns = [
     path('api/auth/register/', views.UserRegisterAPIView.as_view(), name='user_register_api'),
     path('api/auth/login/', views.UserLoginAPIView.as_view(), name='user_login_api'),
     
-    # NEW: Wallet API
+    # Wallet APIs
     path('api/wallet/', views.UserWalletDetailAPIView.as_view(), name='user_wallet_api'),
+    path('api/wallet/initiate-deposit/', views.InitiateWalletDepositAPIView.as_view(), name='initiate_wallet_deposit_api'),
 ]
