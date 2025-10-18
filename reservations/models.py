@@ -30,6 +30,7 @@ class Booking(models.Model):
         ('cancelled', 'لغو شده'),
         ('cancellation_requested', 'درخواست لغو شده'),
         ('modification_requested', 'درخواست ویرایش شده'),
+        ('no_capacity', 'عدم ظرفیت'),
     )
     booking_code = models.CharField(max_length=8, default=generate_numeric_booking_code, unique=True, verbose_name="کد رزرو")
     user = models.ForeignKey(settings.AUTH_USER_MODEL, on_delete=models.SET_NULL, null=True, blank=True, related_name="bookings", verbose_name="کاربر رزرو کننده")

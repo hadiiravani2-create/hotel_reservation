@@ -112,6 +112,7 @@ class Hotel(models.Model):
     name = models.CharField(max_length=255, verbose_name="نام هتل")
     slug = models.SlugField(unique=True, help_text="یکتا و برای آدرس‌دهی مناسب سئو", verbose_name="اسلاگ")
     stars = models.PositiveSmallIntegerField(default=3, verbose_name="ستاره هتل")
+    is_online = models.BooleanField(default=True,verbose_name="رزرو آنلاین (تایید آنی)",help_text="در صورت فعال بودن، رزروها به صورت آنی تایید")
     description = models.TextField(verbose_name="توضیحات هتل", null=True, blank=True)
     address = models.CharField(max_length=500, verbose_name="آدرس")
     city = models.ForeignKey(City, on_delete=models.PROTECT, related_name="hotels", verbose_name="شهر")

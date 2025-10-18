@@ -15,7 +15,7 @@ from django.contrib.auth import get_user_model
 from django.shortcuts import get_object_or_404 
 from rest_framework.exceptions import PermissionDenied 
 from django.db.models import ObjectDoesNotExist, Q # Added Q for OR logic in queryset filtering
-
+from .serializers import BookingStatusUpdateSerializer
 # --- Imports ---
 from .serializers import (
     CreateBookingAPISerializer, BookingListSerializer, BookingDetailSerializer,
@@ -25,7 +25,7 @@ from .serializers import (
 from pricing.selectors import calculate_multi_booking_price
 from hotels.models import RoomType, BoardType
 from pricing.models import Availability
-from core.models import WalletTransaction
+from core.models import WalletTransaction,Wallet
 from .models import Booking, Guest, BookingRoom, OfflineBank, PaymentConfirmation 
 from agencies.models import Agency, AgencyTransaction, AgencyUser
 from rest_framework.authentication import TokenAuthentication
@@ -178,13 +178,21 @@ class CreateBookingAPIView(APIView):
 
             total_price = price_data['total_price']
 
+
             # Create Booking
+            first_room_type_id = validated_data['booking_rooms'][0]['room_type_id']
+            hotel = RoomType.objects.get(pk=first_room_type_id).hotel
+
+            # Determine the initial status based on the hotel's booking process type.
+            initial_status = 'pending' if hotel.is_online else 'awaiting_confirmation'
+
+            # Create Booking with the dynamically determined status.
             booking = Booking.objects.create(
-                user=user, # Set to authenticated user or assigned fallback
+                user=user,
                 agency=agency,
                 check_in=check_in,
                 check_out=check_out,
-                status='pending',
+                status=initial_status, # <-- The new dynamic status is used here
                 total_price=total_price,
             )
             
@@ -432,3 +440,35 @@ class VerifyPaymentAPIView(APIView):
             booking.status = 'cancelled' 
             booking.save()
             return Response({"success": False, "message": "Payment failed. Booking cancelled."}, status=status.HTTP_400_BAD_REQUEST)
+class OperatorBookingConfirmationAPIView(APIView):
+    """
+    API view for operators to list and manage bookings awaiting confirmation.
+    Requires operator-level permissions.
+    """
+    authentication_classes = [TokenAuthentication]
+    permission_classes = [IsAuthenticated] # TODO: Replace with a custom operator permission
+
+    def get(self, request):
+        """
+        Lists all bookings that are awaiting manual confirmation.
+        """
+        # TODO: Add permission check to ensure user is an operator/staff
+        bookings = Booking.objects.filter(status='awaiting_confirmation')
+        serializer = BookingListSerializer(bookings, many=True)
+        return Response(serializer.data, status=status.HTTP_200_OK)
+
+    def post(self, request):
+        """
+        Updates the status of a specific booking.
+        """
+        # TODO: Add permission check
+        serializer = BookingStatusUpdateSerializer(data=request.data)
+        if serializer.is_valid():
+            booking = serializer.save()
+            return Response(
+                {"success": True, "message": f"وضعیت رزرو {booking.booking_code} با موفقیت به '{booking.get_status_display()}' تغییر یافت."},
+                status=status.HTTP_200_OK
+            )
+        return Response(serializer.errors, status=status.HTTP_400_BAD_REQUEST)
+
+

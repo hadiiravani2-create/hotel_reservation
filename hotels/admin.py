@@ -10,6 +10,7 @@ from .models import (
     City, Amenity, Hotel, HotelImage, RoomType, RoomImage,
     HotelCategory, BedType, RoomCategory, TouristAttraction, BoardType
 )
+from services.models import HotelService
 
 class HotelImageInline(admin.TabularInline):
     model = HotelImage
@@ -30,8 +31,8 @@ class RoomImageInline(admin.TabularInline):
 
 @admin.register(Hotel)
 class HotelAdmin(admin.ModelAdmin):
-    list_display = ('name', 'city', 'stars', 'is_suggested', 'manage_rooms_button')
-    list_filter = ('city', 'stars', 'hotel_categories', 'is_suggested')
+    list_display = ('name', 'city', 'stars','is_online', 'is_suggested', 'manage_rooms_button')
+    list_filter = ('is_online','city', 'stars', 'hotel_categories', 'is_suggested')
     search_fields = ('name', 'city__name')
     inlines = [HotelImageInline]
     prepopulated_fields = {'slug': ('name',)}
@@ -52,6 +53,23 @@ class HotelAdmin(admin.ModelAdmin):
     
     manage_rooms_button.short_description = "اتاق‌ها"
 
+class HotelServiceInline(admin.TabularInline):
+    """
+    Allows managing hotel services directly from the hotel's admin page.
+    """
+    model = HotelService
+    extra = 1 # Number of empty forms to display
+    autocomplete_fields = ('service_type',) # If you have many service types
+
+
+class HotelAdmin(admin.ModelAdmin):
+    # ... your existing list_display, search_fields, etc.
+    
+    # --- 3. Add the inline to the HotelAdmin ---
+    inlines = [
+        # ... any other inlines you might have,
+        HotelServiceInline
+    ]
 
 @admin.register(RoomType)
 class RoomTypeAdmin(admin.ModelAdmin):

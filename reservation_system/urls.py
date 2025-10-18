@@ -21,6 +21,7 @@ urlpatterns = [
     # API for login and token retrieval
     path('api/auth/login/', views.obtain_auth_token, name='api_token_auth'),
     path('agencies/', include('agencies.urls', namespace='agencies')),
+    path('api/services/', include('services.urls')),
 ]
 if settings.DEBUG:
     urlpatterns += static(settings.STATIC_URL, document_root=settings.STATIC_ROOT)

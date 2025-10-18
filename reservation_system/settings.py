@@ -57,7 +57,8 @@ INSTALLED_APPS = [
     'agencies.apps.AgenciesConfig',
     'reservations.apps.ReservationsConfig',
     'rest_framework.authtoken',
-    'notifications.apps.NotificationsConfig'
+    'notifications.apps.NotificationsConfig',
+    'services'
 ]
 
 MIDDLEWARE = [
@@ -95,12 +96,27 @@ AUTH_USER_MODEL = 'core.CustomUser'
 
 # Database
 # https://docs.djangoproject.com/en/5.2/ref/settings/#databases
+
 DATABASES = {
     'default': {
-        'ENGINE': 'django.db.backends.sqlite3',
-        'NAME': BASE_DIR / 'db.sqlite3',
+        'ENGINE': 'django.db.backends.postgresql',
+        'NAME': 'hotelmiri_db',        # نام دیتابیس که ایجاد کردید
+        'USER': 'iravani',    # نام کاربری PostgreSQL شما
+        'PASSWORD': 'hadiir439@ODOO', # رمز عبور شما
+        'HOST': 'localhost',       # یا آدرس سرور PostgreSQL
+        'PORT': '5432'
     }
 }
+
+#DATABASES = {
+#    'default': {
+#        'ENGINE': 'django.db.backends.sqlite3',
+#        'NAME': BASE_DIR / 'db.sqlite3',
+#    }
+#}
+
+
+
 
 # Password validation
 # https://docs.djangoproject.com/en/5.2/ref/settings/#auth-password-validators

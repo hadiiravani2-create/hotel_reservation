@@ -5,10 +5,13 @@
 
 from django.db.models.signals import post_save
 from django.dispatch import receiver
+import django.dispatch
 from .models import Booking, PaymentConfirmation
 from notifications.tasks import send_email_task, send_sms_task
 from core.models import SiteSettings, WalletTransaction
 import logging
+
+post_booking_creation = django.dispatch.Signal()
 
 logger = logging.getLogger(__name__)
 
@@ -77,9 +80,10 @@ def handle_payment_verification(sender, instance, **kwargs):
 
         # Case 1: The payment is for a Booking
         if isinstance(related_object, Booking):
-            # Update booking status if it's currently pending
+            # Update booking status if it's in a state that can be confirmed by payment.
+            # This covers both online bookings ('pending') and offline ones approved by an operator.
             if related_object.status == 'pending':
-                related_object.status = 'awaiting_confirmation'
+                related_object.status = 'confirmed'
                 related_object.save(update_fields=['status'])
 
         # Case 2: The payment is for a WalletTransaction (deposit)
