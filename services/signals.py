@@ -1,3 +1,6 @@
+# services/signals.py
+# version: 1.0.0
+
 # In services/signals.py
 from django.dispatch import receiver
 from reservations.signals import post_booking_creation
@@ -23,8 +26,13 @@ def handle_selected_services(sender, **kwargs):
         try:
             hotel_service = HotelService.objects.get(id=service_id, hotel=booking.booking_rooms.first().room_type.hotel)
 
-            # Price calculation logic
-            price = hotel_service.price * quantity # Simplified logic
+            # start modify
+            # Price calculation logic based on the service's pricing model.
+            price = hotel_service.price
+            if hotel_service.pricing_model == 'PER_PERSON':
+                price *= quantity
+            # For 'PER_BOOKING' or 'FREE', the price remains the base price regardless of quantity.
+            # end modify
 
             BookedService.objects.create(
                 booking=booking,
