@@ -91,9 +91,10 @@ class AgencyUserRoleSerializer(serializers.ModelSerializer):
 
 class UserAuthSerializer(serializers.ModelSerializer):
     agency_role = AgencyUserRoleSerializer(read_only=True)
+    agency_id = serializers.ReadOnlyField(source='agency.id')
     class Meta:
         model = CustomUser
-        fields = ['username', 'agency_role']
+        fields = ['username', 'agency_role', 'agency_id']
 
 
 class UserLoginSerializer(serializers.Serializer):

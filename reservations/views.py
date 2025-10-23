@@ -198,18 +198,26 @@ class CreateBookingAPIView(APIView):
             
             # Create BookingRooms and update availability
             for room_data in validated_data['booking_rooms']:
+                try:
+                    room_type = RoomType.objects.get(pk=room_data['room_type_id'])
+                except RoomType.DoesNotExist:
+                    raise ValidationError(f"اتاقی با شناسه {room_data['room_type_id']} یافت نشد.")
+
+                total_adults_from_frontend = room_data.get('adults', 0)
+                extra_adults_for_model = max(0, total_adults_from_frontend - room_type.base_capacity)
                 BookingRoom.objects.create(
                     booking=booking, 
                     room_type_id=room_data['room_type_id'],
                     board_type_id=room_data['board_type_id'],
                     quantity=room_data['quantity'],
-                    adults=room_data['adults'],
+                    adults=extra_adults_for_model,
                     children=room_data['children'],
                     extra_requests=room_data.get('extra_requests') 
                 )
 
+                current_room_type_id = room_data['room_type_id']
                 for date in date_range:
-                    availability_obj = availability_map[(room_type_id, date)]
+                    availability_obj = availability_map[(current_room_type_id, date)]
                     availability_obj.quantity -= room_data['quantity']
                     availability_obj.save()
 
