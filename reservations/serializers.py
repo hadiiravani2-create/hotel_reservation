@@ -1,5 +1,5 @@
 # reservations/serializers.py
-# version: 1.2.4
+# version: 1.2.5
 # REFACTOR: Upgraded PaymentConfirmationSerializer to support GenericForeignKey,
 #           allowing it to link to both Bookings and WalletTransactions.
 
@@ -52,8 +52,7 @@ class BookingRoomSerializer(serializers.Serializer):
     quantity = serializers.IntegerField(min_value=1)
     extra_adults = serializers.IntegerField(min_value=0, default=0)
     children_count = serializers.IntegerField(min_value=0, default=0)
-    extra_requests = serializers.CharField(required=False, allow_blank=True)
-
+    extra_requests = serializers.CharField(required=False, allow_blank=True, allow_null=True)
 # ===================================================================
 # SECTION 2: MAIN SERIALIZERS (MAY HAVE DYNAMIC LOGIC)
 # These can now safely use the serializers from Section 1.
@@ -89,39 +88,6 @@ class BookingDetailSerializer(serializers.ModelSerializer):
 
     def get_total_guests(self, obj):
         return obj.guests.count()
-
-
-class CreateBookingAPISerializer(serializers.Serializer):
-    """
-    Handles validation for the main booking creation payload.
-    Dynamically includes 'selected_services' field if the 'services' app is enabled.
-    """
-    booking_rooms = BookingRoomSerializer(many=True, allow_empty=False)
-    check_in = serializers.CharField(max_length=10)
-    check_out = serializers.CharField(max_length=10)
-    guests = GuestSerializer(many=True, allow_empty=False)
-    agency_id = serializers.IntegerField(required=False, allow_null=True)
-    rules_accepted = serializers.BooleanField(write_only=True)
-
-    def __init__(self, *args, **kwargs):
-        super().__init__(*args, **kwargs)
-        if apps.is_installed('services'):
-            self.fields['selected_services'] = serializers.ListField(
-                child=serializers.DictField(),
-                required=False,
-                write_only=True
-            )
-
-    def validate_rules_accepted(self, value):
-        if not value:
-            raise serializers.ValidationError("پذیرش قوانین و مقررات رزرو الزامی است.")
-        return value
-
-    def validate(self, data):
-        if data['check_in'] >= data['check_out']:
-            raise serializers.ValidationError("تاریخ خروج باید بعد از تاریخ ورود باشد.")
-        return data
-
 
 class GuestBookingLookupSerializer(serializers.Serializer):
     booking_code = serializers.CharField(required=True, max_length=8)
@@ -246,6 +212,8 @@ class BookingRoomQuoteSerializer(serializers.Serializer):
     quantity = serializers.IntegerField(min_value=1)
     extra_adults = serializers.IntegerField(min_value=0, default=0) 
     children_count = serializers.IntegerField(min_value=0, default=0)
+    extra_requests = serializers.CharField(required=False, allow_blank=True, write_only=True, allow_null=True)
+
 class PriceQuoteMultiRoomInputSerializer(serializers.Serializer):
     booking_rooms = BookingRoomQuoteSerializer(many=True)
     check_in = serializers.CharField()

@@ -1,7 +1,7 @@
 # reservations/views.py
-# version: 2.0.8
-# CRITICAL FIX: Implemented user assignment logic for unauthenticated users (Guest/Registration) 
-#               to prevent downstream 500 errors caused by booking.user=None dependencies.
+# version: 2.0.9
+# FIX: Aligned CreateBookingAPIView with new serializer fields (extra_adults, children_count)
+#      and added logic to process and save 'selected_services'.
 
 from rest_framework.views import APIView
 from rest_framework.response import Response
@@ -31,9 +31,21 @@ from agencies.models import Agency, AgencyTransaction, AgencyUser
 from rest_framework.authentication import TokenAuthentication
 from rest_framework.permissions import AllowAny, IsAuthenticated 
 from django.utils.decorators import method_decorator
-from django.apps import apps 
+from django.apps import apps # <-- ADDED
 
 CustomUser = get_user_model()
+
+# --- ADDED: Conditionally import services models ---
+if apps.is_installed('services'):
+    try:
+        from services.models import HotelService, BookedService
+        SERVICES_APP_ENABLED = True
+    except ImportError:
+        SERVICES_APP_ENABLED = False
+else:
+    SERVICES_APP_ENABLED = False
+# --- END ADDITION ---
+
 
 class PayWithWalletAPIView(APIView):
     """
@@ -204,6 +216,7 @@ class CreateBookingAPIView(APIView):
                 except RoomType.DoesNotExist:
                     raise ValidationError(f"اتاقی با شناسه {room_data['room_type_id']} یافت نشد.")
 
+                # --- START: Modified logic to read new field names ---
                 extra_adults_for_model = room_data.get('extra_adults', 0)
                 children_for_model = room_data.get('children_count', 0)
                 
@@ -216,6 +229,7 @@ class CreateBookingAPIView(APIView):
                     children=children_for_model, # Use new field
                     extra_requests=room_data.get('extra_requests') 
                 )
+                # --- END: Modified logic ---
 
                 current_room_type_id = room_data['room_type_id']
                 for date in date_range:
@@ -224,12 +238,12 @@ class CreateBookingAPIView(APIView):
                     availability_obj.save()
 
             # Create Guests
-            # Create Guests
             for guest_data in validated_data['guests']:
                 # The 'wants_to_register' field should be popped if it exists, as it's not a model field
                 guest_data.pop('wants_to_register', None)
                 Guest.objects.create(booking=booking, **guest_data)
                 
+            # --- START: New logic to save selected services ---
             if SERVICES_APP_ENABLED and 'selected_services' in validated_data:
                 for service_data in validated_data['selected_services']:
                     try:
@@ -262,7 +276,7 @@ class CreateBookingAPIView(APIView):
             
             # Save the booking again to update total_price with services
             booking.save(update_fields=['total_price'])
-                
+            # --- END: New logic to save selected services ---
                 
             # TODO: Handle optional registration if requested by the principal guest (Future Feature)
 
@@ -515,5 +529,3 @@ class OperatorBookingConfirmationAPIView(APIView):
                 status=status.HTTP_200_OK
             )
         return Response(serializer.errors, status=status.HTTP_400_BAD_REQUEST)
-
-
