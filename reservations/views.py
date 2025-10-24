@@ -31,6 +31,7 @@ from agencies.models import Agency, AgencyTransaction, AgencyUser
 from rest_framework.authentication import TokenAuthentication
 from rest_framework.permissions import AllowAny, IsAuthenticated 
 from django.utils.decorators import method_decorator
+from django.apps import apps 
 
 CustomUser = get_user_model()
 
@@ -203,15 +204,16 @@ class CreateBookingAPIView(APIView):
                 except RoomType.DoesNotExist:
                     raise ValidationError(f"اتاقی با شناسه {room_data['room_type_id']} یافت نشد.")
 
-                total_adults_from_frontend = room_data.get('adults', 0)
-                extra_adults_for_model = max(0, total_adults_from_frontend - room_type.base_capacity)
+                extra_adults_for_model = room_data.get('extra_adults', 0)
+                children_for_model = room_data.get('children_count', 0)
+                
                 BookingRoom.objects.create(
                     booking=booking, 
                     room_type_id=room_data['room_type_id'],
                     board_type_id=room_data['board_type_id'],
                     quantity=room_data['quantity'],
-                    adults=extra_adults_for_model,
-                    children=room_data['children'],
+                    adults=extra_adults_for_model, # Use new field
+                    children=children_for_model, # Use new field
                     extra_requests=room_data.get('extra_requests') 
                 )
 
@@ -222,10 +224,45 @@ class CreateBookingAPIView(APIView):
                     availability_obj.save()
 
             # Create Guests
+            # Create Guests
             for guest_data in validated_data['guests']:
                 # The 'wants_to_register' field should be popped if it exists, as it's not a model field
                 guest_data.pop('wants_to_register', None)
                 Guest.objects.create(booking=booking, **guest_data)
+                
+            if SERVICES_APP_ENABLED and 'selected_services' in validated_data:
+                for service_data in validated_data['selected_services']:
+                    try:
+                        service_id = service_data.get('id')
+                        quantity = service_data.get('quantity', 1)
+                        service = HotelService.objects.get(id=service_id, hotel=hotel)
+                        
+                        # Calculate price based on service model
+                        price = 0
+                        if service.pricing_model == 'PERSON':
+                            price = service.price * quantity
+                        elif service.pricing_model == 'BOOKING':
+                            price = service.price
+                            quantity = 1 # Enforce quantity 1 for per-booking
+                        # FREE services have price 0
+
+                        BookedService.objects.create(
+                            booking=booking,
+                            hotel_service=service,
+                            quantity=quantity,
+                            total_price=price,
+                            details=service_data.get('details', {})
+                        )
+                        
+                        # Add service price to booking total price
+                        booking.total_price += price
+
+                    except HotelService.DoesNotExist:
+                        pass # Skip invalid services
+            
+            # Save the booking again to update total_price with services
+            booking.save(update_fields=['total_price'])
+                
                 
             # TODO: Handle optional registration if requested by the principal guest (Future Feature)
 

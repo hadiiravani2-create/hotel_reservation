@@ -1,5 +1,5 @@
 # reservations/serializers.py
-# version: 1.2.3
+# version: 1.2.4
 # REFACTOR: Upgraded PaymentConfirmationSerializer to support GenericForeignKey,
 #           allowing it to link to both Bookings and WalletTransactions.
 
@@ -50,8 +50,8 @@ class BookingRoomSerializer(serializers.Serializer):
     room_type_id = serializers.IntegerField()
     board_type_id = serializers.IntegerField()
     quantity = serializers.IntegerField(min_value=1)
-    adults = serializers.IntegerField(min_value=0, default=0)
-    children = serializers.IntegerField(min_value=0, default=0)
+    extra_adults = serializers.IntegerField(min_value=0, default=0)
+    children_count = serializers.IntegerField(min_value=0, default=0)
     extra_requests = serializers.CharField(required=False, allow_blank=True)
 
 # ===================================================================
