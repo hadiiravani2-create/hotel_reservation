@@ -28,13 +28,17 @@ SECRET_KEY = env('SECRET_KEY')
 DEBUG = env('DEBUG')
 
 
-ALLOWED_HOSTS = ['192.168.10.131','2.180.44.137','demo.mirisafar.com','hotel.mirisafar.com']
+ALLOWED_HOSTS = ['192.168.10.131','2.180.44.137','demo.mirisafar.com','hotel.mirisafar.com', 'mirisafar.com', 'admin.mirisafar.com']
 CORS_ALLOWED_ORIGINS = [
     # ...
     "http://hotel.mirisafar.com", 
+    "http://mirisafar.com",
     # ...
+    "http://192.168.10.131:3001",
     "http://192.168.10.131:3000",
-    "http://localhost:3000", 
+    "http://localhost:3000",
+
+    "http://localhost:3001",
     # ...
 ]
 CSRF_TRUSTED_ORIGINS = CORS_ALLOWED_ORIGINS
@@ -100,11 +104,11 @@ AUTH_USER_MODEL = 'core.CustomUser'
 DATABASES = {
     'default': {
         'ENGINE': 'django.db.backends.postgresql',
-        'NAME': 'hotelmiri_db',        # نام دیتابیس که ایجاد کردید
-        'USER': 'iravani',    # نام کاربری PostgreSQL شما
-        'PASSWORD': 'hadiir439@ODOO', # رمز عبور شما
-        'HOST': 'localhost',       # یا آدرس سرور PostgreSQL
-        'PORT': '5432'
+        'NAME': env('DATABASE_NAME'),
+        'USER': env('DATABASE_USER'),
+        'PASSWORD': env('DATABASE_PASSWORD'),
+        'HOST': env('DATABASE_HOST', default='localhost'),
+        'PORT': env('DATABASE_PORT', default='5432'),
     }
 }
 
