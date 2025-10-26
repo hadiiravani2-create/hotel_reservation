@@ -2,10 +2,15 @@
 # version: 1.0.5
 # FEATURE: Added the API endpoint for initiating a wallet deposit.
 
-from django.urls import path
+from django.urls import path, include
+from rest_framework.routers import DefaultRouter
 from . import views
 
 app_name = 'core'
+
+
+router = DefaultRouter()
+router.register(r'api/special-periods', views.SpecialPeriodViewSet, basename='special-period')
 
 urlpatterns = [
     # Site and Menu APIs
@@ -19,4 +24,5 @@ urlpatterns = [
     # Wallet APIs
     path('api/wallet/', views.UserWalletDetailAPIView.as_view(), name='user_wallet_api'),
     path('api/wallet/initiate-deposit/', views.InitiateWalletDepositAPIView.as_view(), name='initiate_wallet_deposit_api'),
+    path('', include(router.urls)),
 ]

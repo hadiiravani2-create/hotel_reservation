@@ -81,6 +81,23 @@ class WalletTransaction(models.Model):
     def __str__(self):
         return f"{self.get_transaction_type_display()} ({self.get_status_display()}) - {self.wallet.user.username}"
 
+class SpecialPeriod(models.Model):
+    """
+    Defines specific date ranges (e.g., peak seasons, holidays) 
+    that can be used by other modules like cancellation policies or booking rules.
+    """
+    name = models.CharField(max_length=255, verbose_name="نام دوره", help_text="مثال: نوروز ۱۴۰۵")
+    start_date = models.DateField(verbose_name="تاریخ شروع")
+    end_date = models.DateField(verbose_name="تاریخ پایان")
+
+    class Meta:
+        verbose_name = "دوره زمانی خاص"
+        verbose_name_plural = "دوره‌های زمانی خاص"
+        ordering = ['-start_date']
+
+    def __str__(self):
+        return f"{self.name} ({self.start_date} - {self.end_date})"
+
 
 # ... (SiteSettings, Menu, MenuItem models remain unchanged)
 class SiteSettings(models.Model):
@@ -105,6 +122,9 @@ class SiteSettings(models.Model):
         verbose_name_plural = "تنظیمات سایت"
     def __str__(self):
         return self.site_name
+
+
+
 class Menu(models.Model):
     name = models.CharField(max_length=50, unique=True, verbose_name="نام منو")
     slug = models.SlugField(unique=True, help_text="برای فراخوانی در کد استفاده می‌شود (مثلا: main-menu)")

@@ -62,7 +62,8 @@ INSTALLED_APPS = [
     'reservations.apps.ReservationsConfig',
     'rest_framework.authtoken',
     'notifications.apps.NotificationsConfig',
-    'services'
+    'services',
+    'cancellations'
 ]
 
 MIDDLEWARE = [

@@ -16,6 +16,7 @@ from .models import (
 )
 from pricing.models import Availability
 from pricing.selectors import _get_daily_price_for_user
+from cancellations.serializers import CancellationPolicySerializer
 
 
 # --- START: All Base Serializers Defined First ---
@@ -153,6 +154,8 @@ class HotelSerializer(serializers.ModelSerializer):
     images = HotelImageSerializer(many=True, read_only=True)
     hotel_categories = HotelCategorySerializer(many=True, read_only=True)
     available_rooms = serializers.SerializerMethodField()
+    cancellation_policy_normal = CancellationPolicySerializer(read_only=True)
+    cancellation_policy_peak = CancellationPolicySerializer(read_only=True)
 
     class Meta:
         model = Hotel
@@ -161,7 +164,7 @@ class HotelSerializer(serializers.ModelSerializer):
             'amenities', 'images', 'hotel_categories', 'meta_title',
             'meta_description', 'latitude', 'longitude', 'check_in_time',
             'check_out_time', 'contact_phone', 'contact_email', 'rules',
-            'available_rooms'
+            'available_rooms','cancellation_policy_normal', 'cancellation_policy_peak'
         ]
 
     def get_available_rooms(self, obj):

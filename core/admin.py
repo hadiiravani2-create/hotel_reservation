@@ -3,9 +3,11 @@
 # FEATURE: Registered Wallet and WalletTransaction models to the admin panel.
 
 from django.contrib import admin
+from django.db import models
 from django.contrib.auth.admin import UserAdmin
 from django.forms import inlineformset_factory
-from .models import CustomUser, SiteSettings, Menu, MenuItem, AgencyUserRole, Wallet, WalletTransaction
+from jalali_date.widgets import AdminJalaliDateWidget
+from .models import CustomUser, SiteSettings, Menu, MenuItem, AgencyUserRole, Wallet, WalletTransaction, SpecialPeriod
 
 # --- Custom Inline for Menu Items ---
 class MenuItemInline(admin.TabularInline):
@@ -28,6 +30,21 @@ class WalletTransactionInline(admin.TabularInline):
 
     def has_add_permission(self, request, obj=None):
         return False
+
+@admin.register(SpecialPeriod)
+class SpecialPeriodAdmin(admin.ModelAdmin):
+    """
+    Admin interface for managing Special Periods (e.g., peak seasons).
+    Uses Jalali calendar widgets and filters, similar to pricing forms.
+    """
+    list_display = ('name', 'start_date', 'end_date')
+    search_fields = ('name',)
+    list_filter = ('start_date', 'end_date')
+    ordering = ('-start_date',)
+
+    formfield_overrides = {
+        models.DateField: {'widget': AdminJalaliDateWidget},
+    }
 
 @admin.register(Wallet)
 class WalletAdmin(admin.ModelAdmin):

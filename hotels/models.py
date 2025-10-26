@@ -129,6 +129,21 @@ class Hotel(models.Model):
     contact_email = models.EmailField(blank=True, null=True, verbose_name="ایمیل")
     rules = models.TextField(blank=True, null=True, verbose_name="قوانین هتل")
 
+    cancellation_policy_normal = models.ForeignKey(
+        'cancellations.CancellationPolicy',
+        on_delete=models.SET_NULL,
+        null=True, blank=True,
+        related_name='hotels_normal_policy',
+        verbose_name="سیاست لغو (ایام عادی)"
+    )
+    cancellation_policy_peak = models.ForeignKey(
+        'cancellations.CancellationPolicy',
+        on_delete=models.SET_NULL,
+        null=True, blank=True,
+        related_name='hotels_peak_policy',
+        verbose_name="سیاست لغو (ایام پیک)"
+    )
+
     # vendor = models.ForeignKey(settings.AUTH_USER_MODEL, on_delete=models.CASCADE, related_name="hotels") # Todo uncomment
 
     class Meta:

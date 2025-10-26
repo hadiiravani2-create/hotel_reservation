@@ -4,16 +4,16 @@
 
 from rest_framework.views import APIView
 from rest_framework.response import Response
-from rest_framework import status, generics, serializers
+from rest_framework import status, generics, serializers, viewsets
 from rest_framework.authtoken.models import Token
 from django.shortcuts import get_object_or_404
 from rest_framework.permissions import IsAuthenticated
 from rest_framework.authentication import TokenAuthentication
 
-from .models import SiteSettings, Menu, CustomUser, Wallet, WalletTransaction
+from .models import SiteSettings, Menu, CustomUser, Wallet, WalletTransaction, SpecialPeriod
 from .serializers import (
     SiteSettingsSerializer, MenuItemSerializer, UserRegisterSerializer, 
-    UserLoginSerializer, UserAuthSerializer, MenuSerializer, WalletSerializer
+    UserLoginSerializer, UserAuthSerializer, MenuSerializer, WalletSerializer,SpecialPeriodSerializer
 )
 
 # ... (SiteSettingsAPIView, MenuView, UserRegisterAPIView, UserLoginAPIView remain unchanged) ...
@@ -96,3 +96,13 @@ class InitiateWalletDepositAPIView(APIView):
             'message': 'درخواست شارژ با موفقیت ثبت شد. لطفا اطلاعات واریز را ثبت کنید.',
             'transaction_id': transaction.transaction_id
         }, status=status.HTTP_201_CREATED)
+
+
+class SpecialPeriodViewSet(viewsets.ModelViewSet):
+    """
+    API endpoint that allows SpecialPeriods (e.g., peak seasons)
+    to be viewed or edited.
+    """
+    queryset = SpecialPeriod.objects.all()
+    serializer_class = SpecialPeriodSerializer
+    # Add permissions later if needed, e.g., [IsAdminUser]

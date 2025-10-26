@@ -3,7 +3,7 @@
 # FEATURE: Added WalletSerializer and WalletTransactionSerializer for the new wallet feature.
 
 from rest_framework import serializers
-from .models import SiteSettings, Menu, MenuItem, CustomUser, AgencyUserRole, Wallet, WalletTransaction
+from .models import SiteSettings, Menu, MenuItem, CustomUser, AgencyUserRole, Wallet, WalletTransaction, SpecialPeriod
 from django.contrib.auth.password_validation import validate_password
 from django.conf import settings
 from rest_framework.authtoken.models import Token
@@ -55,6 +55,13 @@ class SiteSettingsSerializer(serializers.ModelSerializer):
         return None
 
 # --- Menu Serializers ---
+class SpecialPeriodSerializer(serializers.ModelSerializer):
+    """
+    Serializer for SpecialPeriod model.
+    """
+    class Meta:
+        model = SpecialPeriod
+        fields = ['id', 'name', 'start_date', 'end_date']
 
 class MenuItemChildrenSerializer(serializers.ModelSerializer):
     class Meta:
