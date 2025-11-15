@@ -1,6 +1,7 @@
 # pricing/admin.py
-# version 2
+# version: 2.0.1
 # Feature: Added search and autocomplete fields for better user experience.
+# Note: Added price_formatter.js to PriceAdmin.Media
 
 from django.contrib import admin
 from .models import Availability , Price
@@ -53,7 +54,8 @@ class PriceAdmin(admin.ModelAdmin):
         return obj.room_type.hotel.name
 
     class Media:
-        js = ("admin/js/availability_form.js",)
+        # ADDED: Load the price formatter script alongside the existing script
+        js = ("admin/js/availability_form.js", "admin/js/price_formatter.js",)
 
     def save_model(self, request, obj, form, change):
         start_date = form.cleaned_data['start_date']

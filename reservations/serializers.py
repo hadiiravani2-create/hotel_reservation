@@ -94,9 +94,49 @@ class GuestBookingLookupSerializer(serializers.Serializer):
     national_id = serializers.CharField(required=False, allow_blank=True, max_length=10) 
     passport_number = serializers.CharField(required=False, allow_blank=True, max_length=50)
     def validate(self, data):
-        # ... (validation logic remains unchanged)
-        return data
+         booking_code = data.get('booking_code')
+         national_id = data.get('national_id')
+         passport_number = data.get('passport_number')
 
+         if not national_id and not passport_number:
+             raise serializers.ValidationError("کدملی یا شماره پاسپورت الزامی است.")
+
+         try:
+             # Find the booking
+             booking = Booking.objects.get(booking_code=booking_code)
+         except Booking.DoesNotExist:
+             raise serializers.ValidationError("رزرو یافت نشد.")
+
+         # Build a query to find the guest
+         # Note: We need to import Q from django.db.models
+         from django.db.models import Q
+
+         guest_query = Q()
+         if national_id:
+             guest_query |= Q(national_id=national_id, is_foreign=False)
+         if passport_number:
+             guest_query |= Q(passport_number=passport_number, is_foreign=True)
+
+         try:
+             # Find a guest matching the criteria
+             guest = Guest.objects.get(guest_query)
+         except Guest.DoesNotExist:
+             raise serializers.ValidationError("مهمان یافت نشد.")
+         except Guest.MultipleObjectsReturned:
+             # If multiple guests match (e.g., same national_id in system), take the first one
+             guest = Guest.objects.filter(guest_query).first()
+
+         # Check if the found guest is actually part of the specified booking
+         if not booking.guests.filter(id=guest.id).exists():
+             raise serializers.ValidationError("این مهمان در رزرو مورد نظر یافت نشد.")
+
+         # --- THE FIX ---
+         # Attach the booking object to the data dict so the view can access it
+         data['booking'] = booking
+         data['guest'] = guest # Also adding guest, though the view doesn't use it yet
+
+         return data
+    # --- END: MODIFIED SECTION ---
 class OfflineBankSerializer(serializers.ModelSerializer):
     class Meta:
         model = OfflineBank

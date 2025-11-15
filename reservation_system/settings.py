@@ -63,7 +63,8 @@ INSTALLED_APPS = [
     'rest_framework.authtoken',
     'notifications.apps.NotificationsConfig',
     'services',
-    'cancellations'
+    'cancellations',
+    'django.contrib.humanize'
 ]
 
 MIDDLEWARE = [
@@ -139,6 +140,12 @@ TIME_ZONE = 'Asia/Tehran'
 USE_I18N = True
 USE_TZ = True
 
+
+USE_L10N = True
+USE_THOUSAND_SEPARATOR = True
+
+
+FORMAT_MODULE_PATH = ['reservation_system.formats']
 # Static files (CSS, JavaScript, Images)
 # https://docs.djangoproject.com/en/5.2/howto/static-files/
 STATIC_URL = 'static/'
