@@ -8,6 +8,10 @@ from rest_framework.authtoken import views
 from django.conf.urls.static import static
 from django.conf import settings
 
+admin.site.site_header = "پنل مدیریت سامانه رزرو هتل میری سفر"
+admin.site.site_title = "مدیریت میری سفر"
+admin.site.index_title = "به پنل مدیریت خوش آمدید"
+
 urlpatterns = [
     path('admin/', admin.site.urls),
 

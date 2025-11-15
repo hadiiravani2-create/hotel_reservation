@@ -175,3 +175,4 @@ JAZZMIN_SETTINGS = {
     # ... other settings
     "custom_css": "admin/css/jazzmin_rtl.css",
 }
+

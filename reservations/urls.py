@@ -11,7 +11,8 @@ from .views import (
     # NEW VIEWS
     OfflineBankListAPIView, PaymentConfirmationAPIView,
     GuestBookingLookupAPIView,
-    OperatorBookingConfirmationAPIView # This was added in previous steps, keeping it for consistency
+    OperatorBookingConfirmationAPIView,
+    CancelBookingAPIView
 )
 from rest_framework import routers
 
@@ -34,6 +35,8 @@ urlpatterns = [
 
     # User/Management Actions
     path('my-bookings/', MyBookingsAPIView.as_view(), name='my-bookings'),
+    # --- Cancellation URL ---
+    path('api/bookings/cancel/', CancelBookingAPIView.as_view(), name='cancel_booking_api'),
     path('booking-request/', BookingRequestAPIView.as_view(), name='booking-request'),
 
     # Operator Actions

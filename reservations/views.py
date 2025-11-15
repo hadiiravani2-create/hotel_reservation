@@ -31,11 +31,12 @@ from agencies.models import Agency, AgencyTransaction, AgencyUser
 from rest_framework.authentication import TokenAuthentication
 from rest_framework.permissions import AllowAny, IsAuthenticated 
 from django.utils.decorators import method_decorator
-from django.apps import apps # <-- ADDED
+from django.apps import apps
+from cancellations.services import calculate_cancellation_fee
 
 CustomUser = get_user_model()
 
-# --- ADDED: Conditionally import services models ---
+# --- Conditionally import services models ---
 if apps.is_installed('services'):
     try:
         from services.models import HotelService, BookedService
@@ -44,8 +45,86 @@ if apps.is_installed('services'):
         SERVICES_APP_ENABLED = False
 else:
     SERVICES_APP_ENABLED = False
-# --- END ADDITION ---
 
+
+
+# --- CancelBookingAPIView  ---
+class CancelBookingAPIView(APIView):
+    """
+    Handles the cancellation of a booking by an authenticated user.
+    Calculates the cancellation fee, updates booking status, and processes the refund to the user's wallet.
+    """
+    authentication_classes = [TokenAuthentication]
+    permission_classes = [IsAuthenticated]
+
+    @transaction.atomic # Ensure all database operations succeed or fail together
+    def post(self, request):
+        booking_code = request.data.get('booking_code')
+        if not booking_code:
+            return Response({"error": "شناسه رزرو (booking_code) الزامی است."}, status=status.HTTP_400_BAD_REQUEST)
+
+        try:
+            # Retrieve the booking, ensuring it belongs to the user and is in a cancellable state
+            booking = get_object_or_404(
+                Booking,
+                booking_code=booking_code,
+                user=request.user
+            )
+
+            # Define cancellable statuses (adjust as needed based on your business logic)
+            CANCELLABLE_STATUSES = ['confirmed', 'pending', 'awaiting_confirmation']
+            if booking.status not in CANCELLABLE_STATUSES:
+                return Response(
+                    {"error": f"رزرو در وضعیت '{booking.get_status_display()}' قابل لغو نیست."},
+                    status=status.HTTP_400_BAD_REQUEST
+                )
+
+            # 1. Calculate Cancellation Fee
+            cancellation_fee = calculate_cancellation_fee(booking)
+            refund_amount = (booking.total_amount or Decimal(0)) - cancellation_fee
+            refund_amount = max(Decimal(0), refund_amount) # Ensure refund is not negative
+
+            # 2. Update Booking Status
+            booking.status = 'cancelled'
+            booking.save(update_fields=['status'])
+
+            # 3. Process Refund to Wallet (if applicable)
+            if refund_amount > 0:
+                try:
+                    wallet = Wallet.objects.get(user=request.user)
+                    # Use F() expression for safe concurrent update
+                    wallet.balance = F('balance') + refund_amount
+                    wallet.save(update_fields=['balance'])
+
+                    # 4. Create Refund Transaction Record
+                    WalletTransaction.objects.create(
+                        wallet=wallet,
+                        transaction_type='refund',
+                        amount=refund_amount, # Positive amount for refund
+                        status='completed',
+                        booking=booking,
+                        description=f"بازگشت وجه لغو رزرو {booking.booking_code} (جریمه: {cancellation_fee})"
+                    )
+                except Wallet.DoesNotExist:
+                    # Handle case where user might not have a wallet (though ideally they should)
+                    # Log this situation? For now, we proceed with cancellation but skip refund.
+                    pass # Or return an error specific to wallet issue
+
+            # 5. Return Success Response
+            return Response({
+                "success": True,
+                "message": f"رزرو با موفقیت لغو شد. مبلغ جریمه: {cancellation_fee} تومان. مبلغ بازگشتی به کیف پول: {refund_amount} تومان.",
+                "booking_code": booking.booking_code,
+                "cancellation_fee": cancellation_fee,
+                "refund_amount": refund_amount
+            }, status=status.HTTP_200_OK)
+
+        except Booking.DoesNotExist:
+             return Response({"error": "رزروی با این شناسه یافت نشد یا به شما تعلق ندارد."}, status=status.HTTP_404_NOT_FOUND)
+        except Exception as e:
+            # Generic error handler for unexpected issues
+            # Log the error e
+            return Response({"error": "خطایی در فرآیند لغو رزرو رخ داد."}, status=status.HTTP_500_INTERNAL_SERVER_ERROR)
 
 class PayWithWalletAPIView(APIView):
     """
