@@ -37,6 +37,10 @@ class Booking(models.Model):
     check_in = jmodels.jDateField(verbose_name="تاریخ ورود")
     check_out = jmodels.jDateField(verbose_name="تاریخ خروج")
     total_price = models.DecimalField(max_digits=20, decimal_places=0, verbose_name="قیمت نهایی", null=True, blank=True)
+    total_room_price = models.DecimalField(max_digits=20, decimal_places=0, default=0, verbose_name="جمع هزینه اتاق‌ها")
+    total_service_price = models.DecimalField(max_digits=20, decimal_places=0, default=0, verbose_name="جمع هزینه خدمات")
+    total_vat = models.DecimalField(max_digits=20, decimal_places=0, default=0, verbose_name="مالیات بر ارزش افزوده")
+    paid_amount = models.DecimalField(max_digits=20, decimal_places=0, default=0, verbose_name="مبلغ پرداخت شده")
     status = models.CharField(max_length=30, choices=STATUS_CHOICES, default='pending', verbose_name="وضعیت")
     agency = models.ForeignKey(Agency, on_delete=models.SET_NULL, null=True, blank=True, related_name="bookings", verbose_name="رزرو برای آژانس")
     notification_sent = models.BooleanField(default=False, verbose_name="اطلاع‌رسانی ارسال شده؟")
@@ -48,6 +52,34 @@ class Booking(models.Model):
         ordering = ['-created_at']
     def __str__(self):
         return f"رزرو {self.booking_code}"
+    @property
+    def hotel(self):
+        """
+        Returns the hotel object from the first booked room.
+        Assumes all rooms in a booking are from the same hotel.
+        """
+        first_room = self.booking_rooms.first()
+        if first_room and first_room.room_type:
+            return first_room.room_type.hotel
+        return None
+
+    def get_duration_days(self):
+        """
+        Calculates the duration of the stay in days.
+        """
+        if self.check_in and self.check_out:
+            duration = (self.check_out - self.check_in).days
+            return duration if duration > 0 else 0
+        return 0
+
+    def get_remaining_payment(self):
+        """
+        Calculates the remaining amount to be paid.
+        """
+        total = self.total_price or Decimal(0)
+        paid = self.paid_amount or Decimal(0)
+        remaining = total - paid
+        return remaining if remaining > 0 else Decimal(0)
 
 class BookingRoom(models.Model):
     booking = models.ForeignKey(Booking, on_delete=models.CASCADE, related_name="booking_rooms", verbose_name="رزرو")
@@ -57,6 +89,7 @@ class BookingRoom(models.Model):
     adults = models.PositiveSmallIntegerField(default=0, verbose_name="تعداد نفرات اضافی (بالای ظرفیت پایه)")
     children = models.PositiveSmallIntegerField(default=0, verbose_name="تعداد کودکان این اتاق")
     extra_requests = models.TextField(blank=True, null=True, verbose_name="درخواست‌های اضافی اتاق")
+    total_price = models.DecimalField(max_digits=20, decimal_places=0, default=0, verbose_name="قیمت کل این ردیف اتاق")
     class Meta:
         verbose_name = "اتاق رزرو شده"
         verbose_name_plural = "اتاق‌های رزرو شده"

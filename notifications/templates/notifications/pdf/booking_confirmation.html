@@ -1,0 +1,254 @@
+<!DOCTYPE html>
+<html lang="fa" dir="rtl">
+<head>
+    <meta charset="UTF-8">
+    <title>تاییدیه رزرو {{ booking.booking_code }}</title>
+    <style>
+        @font-face {
+            font-family: 'Vazirmatn';
+            /* The src path is relative to base_url (defined in pdf_utils.py) */
+            src: url('fonts/Vazirmatn-Regular.ttf') format('truetype');
+            font-weight: normal;
+            font-style: normal;
+        }
+
+        body {
+            font-family: 'Vazirmatn', sans-serif;
+            direction: rtl;
+            font-size: 10px;
+            line-height: 1.6;
+            color: #333;
+        }
+
+        .container {
+            width: 95%;
+            margin: 0 auto;
+            padding: 15px;
+        }
+
+        .header {
+            text-align: center;
+            margin-bottom: 20px;
+        }
+
+        .header img {
+            max-width: 120px;
+        }
+
+        .header h1 {
+            font-size: 16px;
+            margin: 0;
+        }
+
+        .header-info {
+            display: table;
+            width: 100%;
+            margin-bottom: 15px;
+            border-bottom: 1px solid #eee;
+            padding-bottom: 10px;
+            font-size: 11px;
+        }
+
+        .header-info div {
+            display: table-cell;
+            width: 50%;
+        }
+
+        .header-info .left {
+            text-align: left;
+        }
+
+        .header-info .right {
+            text-align: right;
+        }
+
+        table {
+            width: 100%;
+            border-collapse: collapse;
+            margin-bottom: 20px;
+        }
+
+        th, td {
+            border: 1px solid #999;
+            padding: 8px;
+            text-align: right;
+        }
+
+        th {
+            background-color: #f2f2f2;
+            font-weight: bold;
+            font-size: 11px;
+        }
+
+        .guest-info-table td {
+            border: 1px solid #ccc;
+            padding: 10px;
+        }
+
+        .guest-info-table .label {
+            font-weight: bold;
+            background-color: #f9f9f9;
+            width: 18%;
+        }
+
+        .booking-details-table th {
+            text-align: center;
+        }
+        .booking-details-table td {
+            text-align: center;
+        }
+
+        .summary-table {
+            width: 45%;
+            margin-right: auto;
+            margin-left: 0;
+        }
+
+        .summary-table .label {
+            font-weight: bold;
+        }
+
+        .summary-table .amount {
+            text-align: left;
+            font-weight: bold;
+            font-size: 12px;
+        }
+
+        .footer p {
+            font-size: 9px;
+            color: #777;
+            border-top: 1px solid #eee;
+            padding-top: 10px;
+            text-align: center;
+        }
+    </style>
+</head>
+<body>
+    
+    {% with primary_guest=booking.guests.first %}
+    
+    <div class="container">
+        
+        <div class="header">
+            <h1>هتل {{ booking.hotel.name | default:'-' }}</h1>
+            <p>{{ booking.hotel.address | default:'-' }}</p>
+        </div>
+
+        <div class="header-info">
+            <div class="right">
+                <strong>تاریخ گزارش:</strong> {% now "Y/m/d" %}
+            </div>
+            <div class="left">
+                <strong>شماره رزرو (Booking Code):</strong> {{ booking.booking_code }}
+            </div>
+        </div>
+
+        <p>
+            احتراماً، ضمن سپاس از انتخاب هتل {{ booking.hotel.name | default:'-' }}، تاییدیه رزرو شما به شرح ذیل اعلام می‌گردد:
+        </p>
+
+        <table class="guest-info-table">
+            <tbody>
+                <tr>
+                    <td class="label">نام میهمان</td>
+                    <td>{{ primary_guest.first_name }} {{ primary_guest.last_name }}</td>
+                    <td class="label">تلفن میهمان</td>
+                    <td>{{ primary_guest.phone_number | default:'-' }}</td>
+                </tr>
+                <tr>
+                    <td class="label">تاریخ ورود</td>
+                    <td>{{ booking.check_in|date:"Y/m/d" }} (ساعت {{ booking.hotel.check_in_time|time:"H:i" | default:'-' }})</td>
+                    <td class="label">تاریخ خروج</td>
+                    <td>{{ booking.check_out|date:"Y/m/d" }} (ساعت {{ booking.hotel.check_out_time|time:"H:i" | default:'-' }})</td>
+                </tr>
+                <tr>
+                    <td class="label">رزرو کننده</td>
+                    <td>
+                        {% if booking.user and booking.user.get_full_name %}
+                            {{ booking.user.get_full_name }}
+                        {% else %}
+                            {{ primary_guest.first_name }} {{ primary_guest.last_name }}
+                        {% endif %}
+                    </td>
+                    <td class="label">تعداد کل شب‌ها</td>
+                    <td>{{ booking.get_duration_days }} شب</td>
+                </tr>
+            </tbody>
+        </table>
+
+        <table class="booking-details-table">
+            <thead>
+                <tr>
+                    <th>ردیف</th>
+                    <th>نوع اتاق</th>
+                    <th>نوع اقامت (Board)</th>
+                    <th>تعداد اتاق</th>
+                    <th>تعداد نفرات</th>
+                    <th>نفر اضافه</th>
+                    <th>جمع نرخ اتاق</th>
+                </tr>
+            </thead>
+            <tbody>
+                {% for room_res in booking.booking_rooms.all %}
+                <tr>
+                    <td>{{ forloop.counter }}</td>
+                    <td>{{ room_res.room_type.name | default:'-' }}</td>
+                    <td>{{ room_res.board_type.name | default:'-' }}</td> 
+                    <td>{{ room_res.quantity }}</td>
+                    <td>{{ room_res.adults }}</td>
+                    <td>{{ room_res.children }}</td>
+                    <td>{{ room_res.total_price|floatformat:"0,g" }} ریال</td>
+                </tr>
+                {% endfor %}
+            </tbody>
+        </table>
+
+        <table class="summary-table">
+            <tbody>
+                <tr>
+                    <td class="label">جمع هزینه اتاق‌ها</td>
+                    <td class="amount">{{ booking.total_room_price|floatformat:"0,g" }} ریال</td>
+                </tr>
+                <tr>
+                    <td class="label">هزینه خدمات (سرویس)</td>
+                    <td class="amount">{{ booking.total_service_price|floatformat:"0,g" }} ریال</td>
+                </tr>
+                <tr>
+                    <td class="label">مالیات بر ارزش افزوده (VAT)</td>
+                    <td class="amount">{{ booking.total_vat|floatformat:"0,g" }} ریال</td>
+                </tr>
+                <tr style="background-color: #f0f0f0; font-size: 13px;">
+                    <td class="label">مبلغ کل قابل پرداخت</td>
+                    <td class="amount">{{ booking.total_price|floatformat:"0,g" }} ریال</td>
+                </tr>
+                <tr>
+                    <td class="label">مبلغ پیش‌پرداخت (پرداخت شده)</td>
+                    <td class="amount">{{ booking.paid_amount|floatformat:"0,g" }} ریال</td>
+                </tr>
+                <tr style="background-color: #e6f7ff; font-size: 13px;">
+                    <td class="label">مبلغ باقیمانده</td>
+                    <td class="amount">{{ booking.get_remaining_payment|floatformat:"0,g" }} ریال</td>
+                </tr>
+            </tbody>
+        </table>
+
+        <div class="footer">
+            <p>
+                <strong>قوانین:</strong>
+                - تخلیه اتاق ساعت {{ booking.hotel.check_out_time|time:"H:i" | default:'-' }} می‌باشد.
+                - اقامت کودکان (بر اساس سیاست هتل): {{ booking.hotel.child_policy | default:'-' }}
+                - <strong>قوانین کنسلی:</strong> {{ booking.cancellation_policy_summary | default:'-' }}
+            </p> 
+            <p>
+                {{ booking.hotel.name | default:'-' }} | 
+                تلفن: {{ booking.hotel.phone_number | default:'-' }} |
+                وبسایت: {{ booking.hotel.website|default:'' }}
+            </p>
+        </div>
+
+    </div>
+    
+    {% endwith %}
+    
+</body>
+</html>

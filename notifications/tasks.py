@@ -1,11 +1,17 @@
 # notifications/tasks.py
+# version: 1.0.0
 
 from celery import shared_task
-from django.core.mail import send_mail, get_connection
+from django.core.mail import send_mail, get_connection, EmailMessage
 from django.template.loader import render_to_string
+from django.utils.translation import gettext_lazy as _
 import requests
 
 from .models import EmailSettings, SmsSettings
+# Import models and utils needed for confirmation task
+from reservations.models import Booking
+from reservations.pdf_utils import generate_booking_confirmation_pdf
+
 
 @shared_task
 def send_email_task(subject, text_content, html_template_name, recipient_list, context):
@@ -83,3 +89,79 @@ def send_sms_task(recipient_number, message):
     except Exception as e:
         print(f"Error sending SMS: {e}")
         return f"Failed to send SMS: {e}"
+
+
+@shared_task
+def send_booking_confirmation_email_task(booking_id: int, email_type: str = 'initial'):
+    """
+    Celery task to generate PDF confirmation and send it as an email attachment.
+    'email_type' can be 'initial', 'payment', or 'final' to adjust the subject.
+    """
+    try:
+        # Get active email settings
+        settings = EmailSettings.objects.filter(is_active=True).first()
+        if not settings:
+            print(f"Error: No active email settings found for booking {booking_id}.")
+            return f"Failed: No active email settings."
+
+        # Get booking object
+        try:
+            booking = Booking.objects.get(id=booking_id)
+        except Booking.DoesNotExist:
+            print(f"Error: Booking with id {booking_id} does not exist.")
+            return f"Failed: Booking not found."
+
+        # Generate the PDF in memory
+        pdf_bytes = generate_booking_confirmation_pdf(booking)
+
+        # Determine email subject based on type
+        if email_type == 'payment':
+            subject = _(f"تاییدیه پرداخت رزرو شما: {booking.booking_code}")
+        elif email_type == 'final':
+            subject = _(f"رزرو شما نهایی شد: {booking.booking_code}")
+        else: # 'initial'
+            subject = _(f"تاییدیه رزرو اولیه: {booking.booking_code}")
+
+        # Render email body (using the existing template from your project)
+        context = {'booking': booking, 'email_type': email_type}
+        html_content = render_to_string(
+            'notifications/email/booking_confrimation.html', 
+            context
+        )
+        
+        # Get custom email connection
+        connection = get_connection(
+            host=settings.host,
+            port=settings.port,
+            username=settings.username,
+            password=settings.password,
+            use_tls=settings.use_tls,
+            use_ssl=settings.use_ssl
+        )
+
+        # Create EmailMessage to support attachments
+        email = EmailMessage(
+            subject=subject,
+            body=html_content,
+            from_email=settings.username,
+            to=[booking.guest.email], # Send to the guest's email
+            connection=connection
+        )
+        email.content_subtype = "html"  # Set email body as HTML
+
+        # Attach the generated PDF
+        email.attach(
+            f'booking_confirmation_{booking.booking_code}.pdf', 
+            pdf_bytes, 
+            'application/pdf'
+        )
+
+        # Send the email
+        email.send(fail_silently=False)
+        
+        return f"Confirmation PDF email sent successfully to {booking.guest.email}"
+
+    except Exception as e:
+        print(f"Error sending confirmation email for booking {booking_id}: {e}")
+        # Add retry logic if needed
+        return f"Failed to send confirmation email: {e}"

@@ -12,7 +12,9 @@ from decimal import Decimal
 from collections import defaultdict
 from django.core.exceptions import ValidationError
 from django.contrib.auth import get_user_model
-from django.shortcuts import get_object_or_404 
+from django.shortcuts import get_object_or_404
+from django.http import HttpResponse # Import HttpResponse
+import traceback # <-- IMPORT TRACEBACK
 from rest_framework.exceptions import PermissionDenied 
 from django.db.models import ObjectDoesNotExist, Q # Added Q for OR logic in queryset filtering
 from .serializers import BookingStatusUpdateSerializer
@@ -27,6 +29,7 @@ from hotels.models import RoomType, BoardType
 from pricing.models import Availability
 from core.models import WalletTransaction,Wallet
 from .models import Booking, Guest, BookingRoom, OfflineBank, PaymentConfirmation 
+from .pdf_utils import generate_booking_confirmation_pdf
 from agencies.models import Agency, AgencyTransaction, AgencyUser
 from rest_framework.authentication import TokenAuthentication
 from rest_framework.permissions import AllowAny, IsAuthenticated 
@@ -157,6 +160,8 @@ class PayWithWalletAPIView(APIView):
 
         # Update booking status to confirmed
         booking.status = 'confirmed'
+        booking.paid_amount = booking.total_price
+        booking.save(update_fields=['status', 'paid_amount'])
         booking.save(update_fields=['status'])
 
         return Response({"success": True, "message": "پرداخت با موفقیت انجام شد و رزرو شما تایید گردید."}, status=status.HTTP_200_OK)
@@ -286,6 +291,10 @@ class CreateBookingAPIView(APIView):
                 check_out=check_out,
                 status=initial_status, # <-- The new dynamic status is used here
                 total_price=total_price,
+                total_room_price=total_price,
+                total_service_price=Decimal(0),
+                total_vat=Decimal(0), # Assuming VAT is included in total_price for now
+                paid_amount=Decimal(0)
             )
             
             # Create BookingRooms and update availability
@@ -294,6 +303,16 @@ class CreateBookingAPIView(APIView):
                     room_type = RoomType.objects.get(pk=room_data['room_type_id'])
                 except RoomType.DoesNotExist:
                     raise ValidationError(f"اتاقی با شناسه {room_data['room_type_id']} یافت نشد.")
+                room_type_id = room_data['room_type_id']
+                board_type_id = room_data['board_type_id']
+
+                # Find the price details calculated by the selector
+                room_price_details = next(
+                    (p for p in price_data.get('room_specific_prices', [])
+                     if p.get('room_type_id') == room_type_id and p.get('board_type_id') == board_type_id),
+                    None
+                )
+                room_total_price = room_price_details['total_price'] if room_price_details else Decimal(0)
 
                 # --- START: Modified logic to read new field names ---
                 extra_adults_for_model = room_data.get('extra_adults', 0)
@@ -306,7 +325,8 @@ class CreateBookingAPIView(APIView):
                     quantity=room_data['quantity'],
                     adults=extra_adults_for_model, # Use new field
                     children=children_for_model, # Use new field
-                    extra_requests=room_data.get('extra_requests') 
+                    extra_requests=room_data.get('extra_requests'), 
+                    total_price=room_total_price
                 )
                 # --- END: Modified logic ---
 
@@ -349,12 +369,13 @@ class CreateBookingAPIView(APIView):
                         
                         # Add service price to booking total price
                         booking.total_price += price
+                        booking.total_service_price += price
 
                     except HotelService.DoesNotExist:
                         pass # Skip invalid services
             
             # Save the booking again to update total_price with services
-            booking.save(update_fields=['total_price'])
+            booking.save(update_fields=['total_price', 'total_service_price'])
             # --- END: New logic to save selected services ---
                 
             # TODO: Handle optional registration if requested by the principal guest (Future Feature)
@@ -415,6 +436,85 @@ class GuestBookingLookupAPIView(APIView):
         detail_serializer = BookingDetailSerializer(booking)
         
         return Response(detail_serializer.data, status=status.HTTP_200_OK)
+
+
+class BookingConfirmationPDFView(APIView):
+    """
+    Generates and returns the booking confirmation PDF.
+    - GET: Authenticated users (owner or agency) can download.
+    - POST: Guests can download by providing their ID code (National ID / Passport).
+    """
+    authentication_classes = [TokenAuthentication]
+    permission_classes = [AllowAny] # Permissions are checked manually inside methods
+
+    def get(self, request, booking_code):
+        """
+        Handles PDF download for AUTHENTICATED users (e.g., from profile panel).
+        """
+        if not request.user.is_authenticated:
+            raise PermissionDenied("برای دانلود این فایل، ابتدا باید وارد حساب کاربری خود شوید.")
+        
+        booking = get_object_or_404(Booking, booking_code=booking_code)
+
+        # Check authorization for authenticated user
+        is_owner = (booking.user == request.user)
+        is_agency_member = False
+        if booking.agency:
+            # Use 'profiles' as per the fix in BookingDetailAPIView
+            is_agency_member = booking.agency.profiles.filter(user=request.user).exists() 
+
+        if not is_owner and not is_agency_member:
+            raise PermissionDenied("شما اجازه دسترسی به این رزرو را ندارید.")
+        
+        # --- Generate and Return PDF ---
+        return self.generate_pdf_response(booking)
+
+    def post(self, request, booking_code):
+        """
+        Handles PDF download for GUEST users (e.g., from track-booking page).
+        Requires 'guest_id_code' (National ID or Passport) in the POST body.
+        """
+        booking = get_object_or_404(Booking, booking_code=booking_code)
+        guest_id_code = request.data.get('guest_id_code')
+
+        if not guest_id_code:
+            return Response({"error": "کد شناسایی میهمان (کد ملی یا شماره پاسپورت) الزامی است."}, status=status.HTTP_400_BAD_REQUEST)
+
+        # Validate against the principal guest (assuming first guest)
+        principal_guest = booking.guests.first()
+        
+        # Assuming Guest model has 'national_id' and 'passport_id' fields
+        if not principal_guest or \
+           (principal_guest.national_id != guest_id_code and principal_guest.passport_id != guest_id_code):
+            
+            raise PermissionDenied("اطلاعات شناسایی میهمان با این رزرو مطابقت ندارد.")
+
+        # --- Generate and Return PDF ---
+        return self.generate_pdf_response(booking)
+
+    def generate_pdf_response(self, booking: Booking):
+        """
+        Helper method to generate the PDF response.
+        """
+        try:
+            pdf_bytes = generate_booking_confirmation_pdf(booking)
+            response = HttpResponse(pdf_bytes, content_type='application/pdf')
+            # 'inline' suggests the browser should try to display it, rather than force download
+            response['Content-Disposition'] = f'inline; filename="booking_{booking.booking_code}.pdf"'
+            return response
+        except Exception as e:
+            # --- START: CRITICAL DEBUGGING ---
+            # Print the full exception traceback to the console
+            print("--- PDF Generation Error ---")
+            print(f"Failed to generate PDF for booking {booking.booking_code}.")
+            print(f"Exception Type: {type(e)}")
+            print(f"Exception Details: {e}")
+            traceback.print_exc() # This prints the full traceback
+            print("-----------------------------")
+            # --- END: CRITICAL DEBUGGING ---
+            # Log the error (e.g., logging.error(f"Error generating PDF: {e}"))
+            return Response({"error": f"خطا در تولید فایل PDF رخ داد."}, status=status.HTTP_500_INTERNAL_SERVER_ERROR)
+
 
 # --- NEW OFFLINE PAYMENT VIEWS ---
 
@@ -562,7 +662,8 @@ class VerifyPaymentAPIView(APIView):
                 return Response({"error": "This booking has already been processed."}, status=status.HTTP_400_BAD_REQUEST)
 
             booking.status = 'confirmed'
-            booking.save()
+            booking.paid_amount = booking.total_price
+            booking.save(update_fields=['status', 'paid_amount'])
             
             if booking.agency:
                  AgencyTransaction.objects.create(

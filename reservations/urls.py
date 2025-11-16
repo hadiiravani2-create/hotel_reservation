@@ -12,7 +12,8 @@ from .views import (
     OfflineBankListAPIView, PaymentConfirmationAPIView,
     GuestBookingLookupAPIView,
     OperatorBookingConfirmationAPIView,
-    CancelBookingAPIView
+    CancelBookingAPIView,
+    BookingConfirmationPDFView
 )
 from rest_framework import routers
 
@@ -45,4 +46,6 @@ urlpatterns = [
     # Online Payment Gateway Integration Points
     path('initiate-payment/', InitiatePaymentAPIView.as_view(), name='initiate-payment'),
     path('verify-payment/', VerifyPaymentAPIView.as_view(), name='verify-payment'),
+    # --- NEW PDF DOWNLOAD URL  ---
+    path('bookings/<str:booking_code>/pdf/', BookingConfirmationPDFView.as_view(), name='booking-pdf-download'),
 ]
