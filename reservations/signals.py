@@ -65,7 +65,7 @@ def send_booking_notifications(sender, instance, created, **kwargs):
 def handle_payment_verification(sender, instance, **kwargs):
     """
     Signal handler that triggers after a PaymentConfirmation is saved.
-    If 'is_verified' is True, it updates the status of the related object.
+    If 'is_verified' is True, it updates the status AND paid_amount of the related object.
     """
     # Proceed only if the payment has been marked as verified and has a related object
     if instance.is_verified and instance.content_object:
@@ -74,10 +74,20 @@ def handle_payment_verification(sender, instance, **kwargs):
         # Case 1: The payment is for a Booking
         if isinstance(related_object, Booking):
             # Update booking status if it's in a state that can be confirmed by payment.
-            # This covers both online bookings ('pending') and offline ones approved by an operator.
-            if related_object.status == 'pending':
+            # This covers both 'pending' (online) and 'awaiting_confirmation' (offline)
+            if related_object.status == 'pending' or related_object.status == 'awaiting_confirmation':
                 related_object.status = 'confirmed'
-                related_object.save(update_fields=['status'])
+                
+                # --- START: PDF Data Fix (Save Paid Amount) ---
+                # Set the paid_amount from the verified payment amount
+                if instance.payment_amount and instance.payment_amount > 0:
+                    related_object.paid_amount = instance.payment_amount
+                else:
+                    # Fallback if payment_amount wasn't entered by operator
+                    related_object.paid_amount = related_object.total_price 
+                
+                related_object.save(update_fields=['status', 'paid_amount'])
+                # --- END: PDF Data Fix ---
 
         # Case 2: The payment is for a WalletTransaction (deposit)
         elif isinstance(related_object, WalletTransaction):

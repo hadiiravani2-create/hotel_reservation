@@ -1,3 +1,5 @@
+{% load jalali_tags %} 
+
 <!DOCTYPE html>
 <html lang="fa" dir="rtl">
 <head>
@@ -6,121 +8,30 @@
     <style>
         @font-face {
             font-family: 'Vazirmatn';
-            /* The src path is relative to base_url (defined in pdf_utils.py) */
             src: url('fonts/Vazirmatn-Regular.ttf') format('truetype');
             font-weight: normal;
             font-style: normal;
         }
-
-        body {
-            font-family: 'Vazirmatn', sans-serif;
-            direction: rtl;
-            font-size: 10px;
-            line-height: 1.6;
-            color: #333;
-        }
-
-        .container {
-            width: 95%;
-            margin: 0 auto;
-            padding: 15px;
-        }
-
-        .header {
-            text-align: center;
-            margin-bottom: 20px;
-        }
-
-        .header img {
-            max-width: 120px;
-        }
-
-        .header h1 {
-            font-size: 16px;
-            margin: 0;
-        }
-
-        .header-info {
-            display: table;
-            width: 100%;
-            margin-bottom: 15px;
-            border-bottom: 1px solid #eee;
-            padding-bottom: 10px;
-            font-size: 11px;
-        }
-
-        .header-info div {
-            display: table-cell;
-            width: 50%;
-        }
-
-        .header-info .left {
-            text-align: left;
-        }
-
-        .header-info .right {
-            text-align: right;
-        }
-
-        table {
-            width: 100%;
-            border-collapse: collapse;
-            margin-bottom: 20px;
-        }
-
-        th, td {
-            border: 1px solid #999;
-            padding: 8px;
-            text-align: right;
-        }
-
-        th {
-            background-color: #f2f2f2;
-            font-weight: bold;
-            font-size: 11px;
-        }
-
-        .guest-info-table td {
-            border: 1px solid #ccc;
-            padding: 10px;
-        }
-
-        .guest-info-table .label {
-            font-weight: bold;
-            background-color: #f9f9f9;
-            width: 18%;
-        }
-
-        .booking-details-table th {
-            text-align: center;
-        }
-        .booking-details-table td {
-            text-align: center;
-        }
-
-        .summary-table {
-            width: 45%;
-            margin-right: auto;
-            margin-left: 0;
-        }
-
-        .summary-table .label {
-            font-weight: bold;
-        }
-
-        .summary-table .amount {
-            text-align: left;
-            font-weight: bold;
-            font-size: 12px;
-        }
-
-        .footer p {
-            font-size: 9px;
-            color: #777;
-            border-top: 1px solid #eee;
-            padding-top: 10px;
-            text-align: center;
-        }
+        body { font-family: 'Vazirmatn', sans-serif; direction: rtl; font-size: 10px; line-height: 1.6; color: #333; }
+        .container { width: 95%; margin: 0 auto; padding: 15px; }
+        .header { text-align: center; margin-bottom: 20px; }
+        .header img { max-width: 120px; }
+        .header h1 { font-size: 16px; margin: 0; }
+        .header-info { display: table; width: 100%; margin-bottom: 15px; border-bottom: 1px solid #eee; padding-bottom: 10px; font-size: 11px; }
+        .header-info div { display: table-cell; width: 50%; }
+        .header-info .left { text-align: left; }
+        .header-info .right { text-align: right; }
+        table { width: 100%; border-collapse: collapse; margin-bottom: 20px; }
+        th, td { border: 1px solid #999; padding: 8px; text-align: right; }
+        th { background-color: #f2f2f2; font-weight: bold; font-size: 11px; }
+        .guest-info-table td { border: 1px solid #ccc; padding: 10px; }
+        .guest-info-table .label { font-weight: bold; background-color: #f9f9f9; width: 18%; }
+        .booking-details-table th { text-align: center; }
+        .booking-details-table td { text-align: center; }
+        .summary-table { width: 45%; margin-right: auto; margin-left: 0; }
+        .summary-table .label { font-weight: bold; }
+        .summary-table .amount { text-align: left; font-weight: bold; font-size: 12px; }
+        .footer p { font-size: 9px; color: #777; border-top: 1px solid #eee; padding-top: 10px; text-align: center; }
     </style>
 </head>
 <body>
@@ -157,9 +68,9 @@
                 </tr>
                 <tr>
                     <td class="label">تاریخ ورود</td>
-                    <td>{{ booking.check_in|date:"Y/m/d" }} (ساعت {{ booking.hotel.check_in_time|time:"H:i" | default:'-' }})</td>
+                    <td>{{ booking.check_in|date:"Y/m/d" }} (ساعت {{ booking.hotel.check_in_time|time:"H:i" | default:'14:00' }})</td>
                     <td class="label">تاریخ خروج</td>
-                    <td>{{ booking.check_out|date:"Y/m/d" }} (ساعت {{ booking.hotel.check_out_time|time:"H:i" | default:'-' }})</td>
+                    <td>{{ booking.check_out|date:"Y/m/d" }} (ساعت {{ booking.hotel.check_out_time|time:"H:i" | default:'12:00' }})</td>
                 </tr>
                 <tr>
                     <td class="label">رزرو کننده</td>
@@ -235,15 +146,16 @@
         <div class="footer">
             <p>
                 <strong>قوانین:</strong>
-                - تخلیه اتاق ساعت {{ booking.hotel.check_out_time|time:"H:i" | default:'-' }} می‌باشد.
-                - اقامت کودکان (بر اساس سیاست هتل): {{ booking.hotel.child_policy | default:'-' }}
-                - <strong>قوانین کنسلی:</strong> {{ booking.cancellation_policy_summary | default:'-' }}
+                - تخلیه اتاق ساعت {{ booking.hotel.check_out_time|time:"H:i" | default:'12:00' }} می‌باشد.
+                - {{ booking.hotel.hotel_rules | default:'قوانین عمومی هتل اعمال می‌گردد.' }}
+                <br>
+                - <strong>قوانین کنسلی:</strong> {{ booking.hotel.cancellation_policy_normal | default:'طبق قوانین هتل.' }}
             </p> 
             <p>
                 {{ booking.hotel.name | default:'-' }} | 
                 تلفن: {{ booking.hotel.phone_number | default:'-' }} |
                 وبسایت: {{ booking.hotel.website|default:'' }}
-            </p>
+            </tran>
         </div>
 
     </div>

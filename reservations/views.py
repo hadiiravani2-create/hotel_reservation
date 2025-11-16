@@ -298,6 +298,7 @@ class CreateBookingAPIView(APIView):
             )
             
             # Create BookingRooms and update availability
+            first_room_data = validated_data['booking_rooms'][0]
             for room_data in validated_data['booking_rooms']:
                 try:
                     room_type = RoomType.objects.get(pk=room_data['room_type_id'])
@@ -317,6 +318,9 @@ class CreateBookingAPIView(APIView):
                 # --- START: Modified logic to read new field names ---
                 extra_adults_for_model = room_data.get('extra_adults', 0)
                 children_for_model = room_data.get('children_count', 0)
+                room_total_price = Decimal(0)
+                if room_data == first_room_data:
+                    room_total_price = booking.total_room_price
                 
                 BookingRoom.objects.create(
                     booking=booking, 
@@ -704,6 +708,9 @@ class OperatorBookingConfirmationAPIView(APIView):
         serializer = BookingStatusUpdateSerializer(data=request.data)
         if serializer.is_valid():
             booking = serializer.save()
+            if booking.status == 'confirmed':
+                booking.paid_amount = booking.total_price
+                booking.save(update_fields=['paid_amount'])
             return Response(
                 {"success": True, "message": f"وضعیت رزرو {booking.booking_code} با موفقیت به '{booking.get_status_display()}' تغییر یافت."},
                 status=status.HTTP_200_OK
