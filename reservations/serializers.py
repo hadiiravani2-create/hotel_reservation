@@ -64,14 +64,14 @@ class BookingDetailSerializer(serializers.ModelSerializer):
     Dynamically includes 'booked_services' if the services app is installed.
     """
     hotel_name = serializers.CharField(source='booking_rooms.first.room_type.hotel.name', read_only=True)
+    hotel_id = serializers.IntegerField(source='booking_rooms.first.room_type.hotel.id', read_only=True)
     total_guests = serializers.SerializerMethodField()
     booking_rooms = BookingRoomDetailSerializer(many=True, read_only=True)
-    guests = GuestDetailSerializer(many=True, read_only=True)
 
     class Meta:
         model = Booking
         fields = [
-            'booking_code', 'hotel_name', 'check_in', 'check_out', 'total_price',
+            'booking_code', 'hotel_name', 'hotel_id', 'check_in', 'check_out', 'total_price',
             'status', 'created_at', 'updated_at', 'total_guests',
             'booking_rooms', 'guests',
         ]
@@ -140,7 +140,7 @@ class GuestBookingLookupSerializer(serializers.Serializer):
 class OfflineBankSerializer(serializers.ModelSerializer):
     class Meta:
         model = OfflineBank
-        fields = ['id', 'bank_name', 'account_holder', 'account_number', 'card_number']
+        fields = ['id', 'bank_name', 'account_holder', 'account_number', 'card_number', 'shaba_number']
 
 class PaymentConfirmationSerializer(serializers.ModelSerializer):
     """

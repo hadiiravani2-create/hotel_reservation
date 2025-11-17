@@ -8,7 +8,7 @@ import random
 import time
 from django.db import models
 from django.conf import settings
-from hotels.models import RoomType, BoardType
+from hotels.models import RoomType, BoardType, Hotel
 from django_jalali.db import models as jmodels
 from django.core.exceptions import ValidationError
 import re
@@ -129,6 +129,8 @@ class OfflineBank(models.Model):
     account_holder = models.CharField(max_length=100, verbose_name="نام صاحب حساب")
     account_number = models.CharField(max_length=50, verbose_name="شماره حساب", unique=True)
     card_number = models.CharField(max_length=16, verbose_name="شماره کارت", unique=True)
+    shaba_number = models.CharField(max_length=26, verbose_name="شماره شبا (IR)", blank=True, null=True, unique=True)
+    hotel = models.ForeignKey(Hotel, on_delete=models.SET_NULL, null=True, blank=True, verbose_name="اختصاص به هتل (اختیاری)", help_text="اگر خالی باشد، این حساب برای همه هتل‌ها نمایش داده می‌شود.")
     is_active = models.BooleanField(default=True, verbose_name="فعال است؟")
     class Meta:
         verbose_name = "حساب بانکی آفلاین"

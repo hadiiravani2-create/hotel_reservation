@@ -58,11 +58,12 @@ class BookingAdmin(admin.ModelAdmin):
 
 @admin.register(OfflineBank)
 class OfflineBankAdmin(admin.ModelAdmin):
-    list_display = ('bank_name', 'account_holder', 'card_number', 'is_active')
-    list_filter = ('is_active',)
+    list_display = ('bank_name', 'account_holder', 'card_number', 'shaba_number', 'hotel', 'is_active')
+    list_filter = ('is_active', 'hotel')
     list_editable = ('is_active',)
-    search_fields = ('bank_name', 'account_number', 'card_number')
-    fields = ('bank_name', 'account_holder', 'account_number', 'card_number', 'is_active')
+    search_fields = ('bank_name', 'account_number', 'card_number', 'shaba_number', 'hotel__name')
+    fields = ('bank_name', 'account_holder', 'account_number', 'card_number', 'shaba_number', 'hotel', 'is_active')
+    autocomplete_fields = ['hotel']
     
 @admin.register(PaymentConfirmation)
 class PaymentConfirmationAdmin(admin.ModelAdmin):

@@ -523,11 +523,36 @@ class BookingConfirmationPDFView(APIView):
 # --- NEW OFFLINE PAYMENT VIEWS ---
 
 class OfflineBankListAPIView(generics.ListAPIView):
-    """API view to list active offline bank accounts for reference."""
-    queryset = OfflineBank.objects.filter(is_active=True)
+    """
+    API view to list active offline bank accounts for reference.
+    Filters banks based on a 'hotel_id' query parameter.
+    - If hotel_id is provided: Returns accounts for that hotel + general accounts (hotel=None).
+    - If hotel_id is NOT provided: Returns only general accounts (hotel=None).
+    """
     serializer_class = OfflineBankSerializer
     authentication_classes = [TokenAuthentication]
     permission_classes = [AllowAny]
+
+    def get_queryset(self):
+        """Overrides the default queryset to implement custom filtering."""
+        hotel_id = self.request.query_params.get('hotel_id')
+        
+        # Base query for all active accounts
+        base_query = OfflineBank.objects.filter(is_active=True)
+        
+        if hotel_id:
+            try:
+                # Filter for the specific hotel OR general accounts
+                hotel_id_int = int(hotel_id)
+                return base_query.filter(
+                    Q(hotel_id=hotel_id_int) | Q(hotel__isnull=True)
+                )
+            except (ValueError, TypeError):
+                # Fallback for invalid hotel_id: only general accounts
+                return base_query.filter(hotel__isnull=True)
+        else:
+            # If no hotel is specified (e.g., wallet charging), only show general accounts
+            return base_query.filter(hotel__isnull=True)
 
 class PaymentConfirmationAPIView(APIView):
     """API view for submitting payment confirmation details."""
