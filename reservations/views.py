@@ -21,8 +21,7 @@ from .serializers import BookingStatusUpdateSerializer
 # --- Imports ---
 from .serializers import (
     CreateBookingAPISerializer, BookingListSerializer, BookingDetailSerializer,
-    OfflineBankSerializer, PaymentConfirmationSerializer,
-    GuestBookingLookupSerializer
+    OfflineBankSerializer, PaymentConfirmationSerializer
 )
 from pricing.selectors import calculate_multi_booking_price
 from hotels.models import RoomType, BoardType
@@ -423,22 +422,39 @@ class BookingDetailAPIView(APIView):
 class GuestBookingLookupAPIView(APIView):
     """
     Allows unregistered guests to securely look up their booking using the booking code and principal guest ID/Passport.
-    This bypasses the strict authorization check in BookingDetailAPIView for confirmed bookings.
+    Updated to search in BOTH national_id and passport_number.
     """
     permission_classes = [AllowAny]
     
     def post(self, request):
-        serializer = GuestBookingLookupSerializer(data=request.data)
+        # دریافت مستقیم پارامترها از بدنه درخواست
+        booking_code = request.data.get('booking_code')
+        # فرانت‌اند ممکن است مقدار را در national_id یا passport_number بفرستد
+        # ما آن را به عنوان یک "Search term" در نظر می‌گیریم
+        search_id = request.data.get('national_id') or request.data.get('passport_number')
+
+        if not booking_code or not search_id:
+            return Response(
+                {'non_field_errors': ['کد رزرو و کد ملی/پاسپورت الزامی است.']}, 
+                status=status.HTTP_400_BAD_REQUEST
+            )
         
-        if not serializer.is_valid():
-            return Response(serializer.errors, status=status.HTTP_400_BAD_REQUEST)
+        # منطق جدید جستجو با استفاده از Q objects
+        # شرط: کد رزرو دقیق باشد + (کد ملی مهمان برابر باشد با ورودی OR شماره پاسپورت مهمان برابر باشد با ورودی)
+        booking = Booking.objects.filter(
+            booking_code=booking_code
+        ).filter(
+            Q(guests__national_id=search_id) | Q(guests__passport_number=search_id)
+        ).distinct().first()
         
-        booking = serializer.validated_data['booking']
+        if not booking:
+            return Response(
+                {'non_field_errors': ['رزروی با این مشخصات یافت نشد.']}, 
+                status=status.HTTP_404_NOT_FOUND
+            )
         
-        # Now that the user is authenticated via code + ID, return the details.
-        # Note: We do not need the full authorization check here because validation already confirmed identity.
+        # در صورت پیدا شدن، اطلاعات رزرو را برمی‌گردانیم
         detail_serializer = BookingDetailSerializer(booking)
-        
         return Response(detail_serializer.data, status=status.HTTP_200_OK)
 
 
