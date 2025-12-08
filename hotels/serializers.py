@@ -1,10 +1,9 @@
 # hotels/serializers.py
-# version: 1.4.2
-# FIX: Corrected a SyntaxError in the _get_date_range method.
-# FEATURE: Added SuggestedHotelSerializer for homepage hotel cards.
+# version: 1.5.1
+# FIX: Re-supplying full file to ensure '_get_dynamic_extra_price' helper method is present.
 
 from rest_framework import serializers
-from django.db.models import Count, Min
+from django.db.models import Count, Min, Avg
 from datetime import timedelta
 from persiantools.jdatetime import JalaliDate
 from decimal import Decimal
@@ -14,7 +13,7 @@ from .models import (
     TouristAttraction, HotelCategory, BedType, RoomCategory,
     HotelImage, RoomImage
 )
-from pricing.models import Availability
+from pricing.models import Availability, Price
 from pricing.selectors import _get_daily_price_for_user
 from cancellations.serializers import CancellationPolicySerializer
 
@@ -82,6 +81,10 @@ class RoomTypeSerializer(serializers.ModelSerializer):
     bed_types = BedTypeSerializer(many=True, read_only=True)
     room_categories = RoomCategorySerializer(many=True, read_only=True)
     
+    # Dynamic pricing fields
+    extra_adult_price = serializers.SerializerMethodField()
+    child_price = serializers.SerializerMethodField()
+
     is_available = serializers.SerializerMethodField()
     availability_quantity = serializers.SerializerMethodField()
     priced_board_types = serializers.SerializerMethodField()
@@ -91,7 +94,9 @@ class RoomTypeSerializer(serializers.ModelSerializer):
         model = RoomType
         fields = [
             'id', 'name', 'code', 'description', 'base_capacity', 
-            'extra_capacity', 'child_capacity', 'amenities', 'images', 
+            'extra_capacity', 'child_capacity', 
+            'extra_adult_price', 'child_price', 
+            'amenities', 'images', 
             'bed_types', 'room_categories',
             'is_available', 'availability_quantity', 'priced_board_types', 'error_message'
         ]
@@ -102,11 +107,40 @@ class RoomTypeSerializer(serializers.ModelSerializer):
         if not check_in_str or not duration_str: return None, 0
         try:
             check_in_date = JalaliDate.fromisoformat(check_in_str).to_gregorian()
-            # FIX: The following line was incomplete and caused a SyntaxError.
             duration = int(duration_str)
             if duration <= 0: return None, 0
             return [check_in_date + timedelta(days=i) for i in range(duration)], duration
         except (ValueError, TypeError): return None, 0
+
+    # --- Helper Method that was missing ---
+    def _get_dynamic_extra_price(self, obj, field_name):
+        date_range, duration = self._get_date_range()
+        
+        # Determine the fallback static field name on the model
+        static_field = 'extra_person_price' if field_name == 'extra' else 'child_price'
+        
+        if not date_range:
+            return getattr(obj, static_field, 0)
+
+        # Fetch actual prices for the date range
+        avg_price = Price.objects.filter(
+            room_type=obj,
+            date__in=date_range
+        ).aggregate(
+            avg_val=Avg(static_field)
+        )['avg_val']
+
+        if avg_price is not None:
+            return int(avg_price)
+        
+        # If no dynamic prices exist, fallback to static
+        return getattr(obj, static_field, 0)
+
+    def get_extra_adult_price(self, obj):
+        return self._get_dynamic_extra_price(obj, 'extra')
+
+    def get_child_price(self, obj):
+        return self._get_dynamic_extra_price(obj, 'child')
 
     def get_is_available(self, obj):
         date_range, duration = self._get_date_range()
@@ -177,7 +211,6 @@ class HotelSerializer(serializers.ModelSerializer):
         available_rooms.sort(key=sort_key)
         return available_rooms
 
-# New serializer for suggested hotels on the homepage
 class SuggestedHotelSerializer(serializers.ModelSerializer):
     """
     A lightweight serializer for displaying suggested hotels on the homepage.
@@ -190,7 +223,6 @@ class SuggestedHotelSerializer(serializers.ModelSerializer):
         fields = ['id', 'name', 'slug', 'stars', 'city_name', 'main_image']
 
     def get_main_image(self, obj):
-        # Returns the URL of the first image in the hotel's gallery.
         first_image = obj.images.first()
         if first_image:
             request = self.context.get('request')
