@@ -9,6 +9,8 @@ class HotelSearchResultSerializer(serializers.Serializer):
     hotel_slug = serializers.SlugField()
     hotel_stars = serializers.IntegerField()
     min_price = serializers.DecimalField(max_digits=20, decimal_places=0)
+    main_image = serializers.CharField(allow_null=True, required=False)
+    address = serializers.CharField(allow_null=True, required=False)
 
 # --- سریالایزرهای قبلی بدون تغییر باقی می‌مانند ---
 

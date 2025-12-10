@@ -215,14 +215,50 @@ class PriceQuoteMultiRoomInputSerializer(serializers.Serializer):
 class BookingListSerializer(serializers.ModelSerializer):
     hotel_name = serializers.CharField(source='booking_rooms.first.room_type.hotel.name', read_only=True)
     room_summary = serializers.SerializerMethodField()
+    # فیلدهای جدید
+    main_guest = serializers.SerializerMethodField()
+    capacity_details = serializers.SerializerMethodField()
+
     class Meta:
         model = Booking
-        fields = ['booking_code', 'hotel_name', 'room_summary', 'check_in', 'check_out', 'total_price', 'status']
+        fields = [
+            'booking_code', 'hotel_name', 'room_summary', 
+            'check_in', 'check_out', 'total_price', 'status',
+            'main_guest', 'capacity_details'
+        ]
+
     def get_room_summary(self, obj):
         first_room = obj.booking_rooms.first()
         if first_room:
-            return f"{first_room.quantity} x {first_room.room_type.name}"
+            return f"{first_room.quantity} باب {first_room.room_type.name}"
         return "N/A"
+
+    # --- این دو متد باید حتماً داخل کلاس باشند ---
+    def get_main_guest(self, obj):
+        """Returns the full name of the first guest (primary contact)."""
+        guest = obj.guests.first()
+        if guest:
+            full_name = f"{guest.first_name} {guest.last_name}".strip()
+            return full_name if full_name else "میهمان"
+        return "---"
+
+    def get_capacity_details(self, obj):
+        """Calculates total extra adults and children across all rooms."""
+        total_extra = 0
+        total_children = 0
+        for room in obj.booking_rooms.all():
+            total_extra += room.adults
+            total_children += room.children
+        
+        parts = []
+        if total_extra > 0:
+            parts.append(f"{total_extra} نفر اضافه")
+        if total_children > 0:
+            parts.append(f"{total_children} کودک")
+            
+        return " + ".join(parts) if parts else "ظرفیت استاندارد"
+
+
 class BookingStatusUpdateSerializer(serializers.Serializer):
     """
     Serializer for operator to update the status of a booking that is

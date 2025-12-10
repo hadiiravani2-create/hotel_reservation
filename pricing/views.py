@@ -26,14 +26,14 @@ class HotelSearchAPIView(APIView):
     permission_classes = []
      
     def get(self, request):
-       # ... (Omitted)
        city_id = request.query_params.get('city_id')
        check_in_str = request.query_params.get('check_in')
        duration_str = request.query_params.get('duration')
        
+       # Extract filters
        min_price = request.query_params.get('min_price')
        max_price = request.query_params.get('max_price')
-       stars = request.query_params.get('stars')
+       stars = request.query_params.get('stars') # Expected format: "3,4,5"
        amenities = request.query_params.get('amenities')
 
        if not all([city_id, check_in_str, duration_str]):
@@ -42,19 +42,28 @@ class HotelSearchAPIView(APIView):
        try:
            check_in = jdatetime.strptime(check_in_str, '%Y-%m-%d').date()
            duration = int(duration_str)
-           if duration <= 0:
-               raise ValueError("Duration must be positive")
+           if duration <= 0: raise ValueError
            check_out = check_in + timedelta(days=duration)
-           
            city_id = int(city_id)
+           
+           # Convert price filters to Decimal if present
+           min_p = Decimal(min_price) if min_price else None
+           max_p = Decimal(max_price) if max_price else None
            
        except (ValueError, TypeError):
            return Response({"error": "فرمت پارامترها نامعتبر است."}, status=status.HTTP_400_BAD_REQUEST)
 
+       # FIX: Pass all filters to the selector
        available_hotels = find_available_hotels(
-           city_id=city_id, check_in_date=check_in, check_out_date=check_out,
-           user=request.user
-           # سایر فیلترها در آینده می‌توانند اینجا اضافه شوند
+           city_id=city_id, 
+           check_in_date=check_in, 
+           check_out_date=check_out,
+           user=request.user,
+           # Filters passed as kwargs
+           min_price=min_p,
+           max_price=max_p,
+           stars=stars,
+           amenities=amenities
        )
        
        serializer = HotelSearchResultSerializer(available_hotels, many=True)
