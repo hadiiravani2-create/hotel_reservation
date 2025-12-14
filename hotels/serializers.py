@@ -1,6 +1,6 @@
 # hotels/serializers.py
-# version: 1.5.1
-# FIX: Re-supplying full file to ensure '_get_dynamic_extra_price' helper method is present.
+# version: 2.0.0
+# FIX: REMOVED try/except block. We force the import to reveal the TRUE underlying error (Circular Import or Model Error).
 
 from rest_framework import serializers
 from django.db.models import Count, Min, Avg
@@ -10,15 +10,66 @@ from decimal import Decimal
 
 from .models import (
     City, Amenity, Hotel, RoomType, BoardType,
-    TouristAttraction, HotelCategory, BedType, RoomCategory,
+    HotelCategory, BedType, RoomCategory,
     HotelImage, RoomImage
 )
+
+# --- CRITICAL CHANGE: Direct Import ---
+# We removed the try/except block. 
+# If this line fails, it means there is an error in 'attractions/models.py' that we MUST see to fix.
+from attractions.models import Attraction, AttractionGallery
+
 from pricing.models import Availability, Price
 from pricing.selectors import _get_daily_price_for_user
 from cancellations.serializers import CancellationPolicySerializer
 
 
-# --- START: All Base Serializers Defined First ---
+# ==============================================================================
+# 1. NESTED SERIALIZERS (Defined First)
+# ==============================================================================
+
+def calculate_hotel_min_price(hotel_obj, context):
+    """
+    Helper to calculate min price for Hotel and SuggestedHotel serializers.
+    """
+    request = context.get('request')
+    check_in_str = None
+    
+    if context.get('check_in'):
+        check_in_str = context.get('check_in')
+    elif request and request.query_params.get('check_in'):
+        check_in_str = request.query_params.get('check_in')
+        
+    target_date = None
+    if check_in_str:
+        try:
+            target_date = JalaliDate.fromisoformat(check_in_str).to_gregorian()
+        except ValueError:
+            pass
+    
+    if not target_date:
+        target_date = JalaliDate.today().to_gregorian()
+
+    min_p = float('inf')
+    found_price = False
+    user = request.user if request else None
+    
+    # Iterate over all room types and board types to find the lowest price
+    for room in hotel_obj.room_types.all():
+        for board in BoardType.objects.all():
+            price_info = _get_daily_price_for_user(room, board, target_date, user)
+            if price_info and price_info.get('price_per_night'):
+                price = price_info['price_per_night']
+                if price > 0 and price < min_p:
+                    min_p = price
+                    found_price = True
+    
+    return min_p if found_price else 0
+
+class AttractionGallerySerializer(serializers.ModelSerializer):
+    class Meta:
+        model = AttractionGallery
+        fields = ['image', 'caption', 'order', 'is_cover']
 
 class AmenitySerializer(serializers.ModelSerializer):
     class Meta:
@@ -40,11 +91,6 @@ class BoardTypeSerializer(serializers.ModelSerializer):
         model = BoardType
         fields = ['id', 'name', 'code', 'description']
 
-class TouristAttractionSerializer(serializers.ModelSerializer):
-    class Meta:
-        model = TouristAttraction
-        fields = ['id', 'name', 'description', 'image', 'latitude', 'longitude']
-
 class HotelCategorySerializer(serializers.ModelSerializer):
     class Meta:
         model = HotelCategory
@@ -60,16 +106,24 @@ class RoomCategorySerializer(serializers.ModelSerializer):
         model = RoomCategory
         fields = ['id', 'name', 'slug']
 
+
+# ==============================================================================
+# 2. MAIN SERIALIZERS
+# ==============================================================================
+
+class AttractionSerializer(serializers.ModelSerializer):
+    # This relies on the AttractionGallerySerializer defined above
+    images = AttractionGallerySerializer(many=True, read_only=True)
+    
+    class Meta:
+        model = Attraction
+        fields = ['id', 'name', 'slug', 'description', 'images', 'latitude', 'longitude']
+
 class CitySerializer(serializers.ModelSerializer):
-    attractions = TouristAttractionSerializer(many=True, read_only=True)
+    attractions = AttractionSerializer(many=True, read_only=True)
     class Meta:
         model = City
-        fields = ['id', 'name', 'slug', 'description', 'image', 'attractions']
-
-# --- END: All Base Serializers Defined First ---
-
-
-# --- Composite and Method-based Serializers ---
+        fields = ['id', 'name', 'slug', 'description', 'image', 'attractions', 'latitude', 'longitude']
 
 class PricedBoardTypeSerializer(serializers.Serializer):
     board_type = BoardTypeSerializer(read_only=True)
@@ -81,10 +135,8 @@ class RoomTypeSerializer(serializers.ModelSerializer):
     bed_types = BedTypeSerializer(many=True, read_only=True)
     room_categories = RoomCategorySerializer(many=True, read_only=True)
     
-    # Dynamic pricing fields
     extra_adult_price = serializers.SerializerMethodField()
     child_price = serializers.SerializerMethodField()
-
     is_available = serializers.SerializerMethodField()
     availability_quantity = serializers.SerializerMethodField()
     priced_board_types = serializers.SerializerMethodField()
@@ -112,17 +164,13 @@ class RoomTypeSerializer(serializers.ModelSerializer):
             return [check_in_date + timedelta(days=i) for i in range(duration)], duration
         except (ValueError, TypeError): return None, 0
 
-    # --- Helper Method that was missing ---
     def _get_dynamic_extra_price(self, obj, field_name):
         date_range, duration = self._get_date_range()
-        
-        # Determine the fallback static field name on the model
         static_field = 'extra_person_price' if field_name == 'extra' else 'child_price'
         
         if not date_range:
             return getattr(obj, static_field, 0)
 
-        # Fetch actual prices for the date range
         avg_price = Price.objects.filter(
             room_type=obj,
             date__in=date_range
@@ -133,7 +181,6 @@ class RoomTypeSerializer(serializers.ModelSerializer):
         if avg_price is not None:
             return int(avg_price)
         
-        # If no dynamic prices exist, fallback to static
         return getattr(obj, static_field, 0)
 
     def get_extra_adult_price(self, obj):
@@ -181,12 +228,12 @@ class RoomTypeSerializer(serializers.ModelSerializer):
                 priced_boards.append({'board_type': board_type, 'total_price': current_total_price})
         
         return PricedBoardTypeSerializer(priced_boards, many=True).data
-
 class HotelSerializer(serializers.ModelSerializer):
     city = CitySerializer(read_only=True)
     amenities = AmenitySerializer(many=True, read_only=True)
     images = HotelImageSerializer(many=True, read_only=True)
     hotel_categories = HotelCategorySerializer(many=True, read_only=True)
+    min_price = serializers.SerializerMethodField()
     available_rooms = serializers.SerializerMethodField()
     cancellation_policy_normal = CancellationPolicySerializer(read_only=True)
     cancellation_policy_peak = CancellationPolicySerializer(read_only=True)
@@ -198,8 +245,12 @@ class HotelSerializer(serializers.ModelSerializer):
             'amenities', 'images', 'hotel_categories', 'meta_title',
             'meta_description', 'latitude', 'longitude', 'check_in_time',
             'check_out_time', 'contact_phone', 'contact_email', 'rules',
-            'available_rooms','cancellation_policy_normal', 'cancellation_policy_peak'
+            'min_price', 'available_rooms',
+            'cancellation_policy_normal', 'cancellation_policy_peak'
         ]
+
+    def get_min_price(self, obj):
+        return calculate_hotel_min_price(obj, self.context)
 
     def get_available_rooms(self, obj):
         if not self.context.get('check_in') or not self.context.get('duration'): return []
@@ -212,15 +263,13 @@ class HotelSerializer(serializers.ModelSerializer):
         return available_rooms
 
 class SuggestedHotelSerializer(serializers.ModelSerializer):
-    """
-    A lightweight serializer for displaying suggested hotels on the homepage.
-    """
     city_name = serializers.CharField(source='city.name')
     main_image = serializers.SerializerMethodField()
+    min_price = serializers.SerializerMethodField()
 
     class Meta:
         model = Hotel
-        fields = ['id', 'name', 'slug', 'stars', 'city_name', 'main_image']
+        fields = ['id', 'name', 'slug', 'stars', 'city_name', 'main_image', 'min_price']
 
     def get_main_image(self, obj):
         first_image = obj.images.first()
@@ -228,3 +277,7 @@ class SuggestedHotelSerializer(serializers.ModelSerializer):
             request = self.context.get('request')
             return request.build_absolute_uri(first_image.image.url) if request else first_image.image.url
         return None
+
+    def get_min_price(self, obj):
+        # Calculate price for TODAY (since homepage usually has no date selected yet)
+        return calculate_hotel_min_price(obj, self.context)

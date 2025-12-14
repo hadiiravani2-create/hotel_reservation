@@ -64,7 +64,9 @@ INSTALLED_APPS = [
     'notifications.apps.NotificationsConfig',
     'services',
     'cancellations',
-    'django.contrib.humanize'
+    'django.contrib.humanize',
+    'attractions',
+    'django_filters'
 ]
 
 MIDDLEWARE = [

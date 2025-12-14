@@ -4,37 +4,7 @@
 
 from django.db import models
 from django.conf import settings
-
-
-# New abstract model for shared metadata
-class ImageMetadata(models.Model):
-    """
-    Abstract base class for models that require image metadata such as caption and display order.
-    Used to implement DRY principle for similar image-related models.
-    """
-    caption = models.CharField(max_length=255, blank=True, null=True, verbose_name="توضیحات تصویر")
-    order = models.PositiveIntegerField(default=0, verbose_name="ترتیب نمایش")
-    
-    class Meta:
-        abstract = True
-        ordering = ['order']
-
-# مدل‌های جدید برای دسته‌بندی و ویژگی‌های هتل و اتاق
-class TouristAttraction(models.Model):
-    # Model for tourist attractions related to a city.
-    name = models.CharField(max_length=200, verbose_name="نام جاذبه")
-    description = models.TextField(verbose_name="توضیحات", null=True, blank=True)
-    city = models.ForeignKey('City', on_delete=models.CASCADE, related_name='attractions', verbose_name="شهر")
-    image = models.ImageField(upload_to='attractions/', blank=True, null=True, verbose_name="تصویر")
-    latitude = models.DecimalField(max_digits=9, decimal_places=6, null=True, blank=True, verbose_name="عرض جغرافیایی")
-    longitude = models.DecimalField(max_digits=9, decimal_places=6, null=True, blank=True, verbose_name="طول جغرافیایی")
-
-    class Meta:
-        verbose_name = "جاذبه گردشگری"
-        verbose_name_plural = "جاذبه‌های گردشگری"
-
-    def __str__(self):
-        return self.name
+from core.models import ImageMetadata
 
 class HotelCategory(models.Model):
     # Model for categorizing hotels (e.g., Luxury, Budget).
@@ -83,6 +53,8 @@ class City(models.Model):
     slug = models.SlugField(unique=True, help_text="یکتا و برای آدرس‌دهی مناسب سئو", verbose_name="اسلاگ")
     description = models.TextField(blank=True, null=True, verbose_name="توضیحات شهر")
     image = models.ImageField(upload_to='city_landing/', blank=True, null=True, verbose_name="تصویر لندینگ")
+    latitude = models.DecimalField(max_digits=9, decimal_places=6, null=True, blank=True, verbose_name="عرض جغرافیایی")
+    longitude = models.DecimalField(max_digits=9, decimal_places=6, null=True, blank=True, verbose_name="طول جغرافیایی")
     meta_title = models.CharField(max_length=255, blank=True, null=True, verbose_name="عنوان سئو")
     meta_description = models.TextField(blank=True, null=True, verbose_name="توضیحات سئو")
     is_featured = models.BooleanField(default=False, verbose_name="شهر برجسته")

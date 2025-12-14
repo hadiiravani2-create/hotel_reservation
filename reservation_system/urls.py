@@ -21,6 +21,7 @@ urlpatterns = [
     path('', include('core.urls', namespace='core')),
     # Correctly prefix all hotel-related APIs with /api/hotels/
     path('api/hotels/', include('hotels.urls', namespace='hotels')),
+    path('api/attractions/', include('attractions.urls')),
 
     # API for login and token retrieval
     path('api/auth/login/', views.obtain_auth_token, name='api_token_auth'),

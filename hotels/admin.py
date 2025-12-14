@@ -8,7 +8,7 @@ from django.urls import reverse
 from django.utils.html import format_html
 from .models import (
     City, Amenity, Hotel, HotelImage, RoomType, RoomImage,
-    HotelCategory, BedType, RoomCategory, TouristAttraction, BoardType
+    HotelCategory, BedType, RoomCategory, BoardType
 )
 from services.models import HotelService
 
@@ -104,9 +104,27 @@ class RoomTypeAdmin(admin.ModelAdmin):
 
 @admin.register(City)
 class CityAdmin(admin.ModelAdmin):
-    list_display = ('name', 'is_featured')
+    # Updated list_display to show coordinates
+    list_display = ('name', 'is_featured', 'latitude', 'longitude')
     search_fields = ('name',)
     prepopulated_fields = {'slug': ('name',)}
+    
+    # Optional: Organize fields
+    fieldsets = (
+        (None, {
+            'fields': ('name', 'slug', 'is_featured')
+        }),
+        ('محتوا', {
+            'fields': ('description', 'image')
+        }),
+        ('موقعیت مکانی', {
+            'fields': ('latitude', 'longitude'),
+            'description': 'مرکز نقشه در صفحه شهر روی این مختصات تنظیم می‌شود.'
+        }),
+        ('سئو', {
+            'fields': ('meta_title', 'meta_description')
+        }),
+    )
 
 @admin.register(Amenity)
 class AmenityAdmin(admin.ModelAdmin):
@@ -131,6 +149,5 @@ class BedTypeAdmin(admin.ModelAdmin):
 class BoardTypeAdmin(admin.ModelAdmin):
     search_fields = ('name', 'code')
 
-admin.site.register(TouristAttraction)
 admin.site.register(HotelImage)
 admin.site.register(RoomImage)

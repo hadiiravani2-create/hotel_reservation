@@ -7,11 +7,11 @@ from rest_framework.response import Response
 from rest_framework.decorators import api_view
 from .models import (
     City, Hotel, Amenity, RoomType, BoardType,
-    TouristAttraction, HotelCategory, BedType, RoomCategory
+    HotelCategory, BedType, RoomCategory
 )
 from .serializers import (
     CitySerializer, HotelSerializer, AmenitySerializer,
-    RoomTypeSerializer, TouristAttractionSerializer,
+    RoomTypeSerializer,
     HotelCategorySerializer, BedTypeSerializer, RoomCategorySerializer,
     SuggestedHotelSerializer # Import the new serializer
 )
@@ -63,10 +63,6 @@ class CityViewSet(viewsets.ModelViewSet):
     queryset = City.objects.all()
     serializer_class = CitySerializer
     lookup_field = 'slug'
-    
-class TouristAttractionViewSet(viewsets.ModelViewSet):
-    queryset = TouristAttraction.objects.all()
-    serializer_class = TouristAttractionSerializer
     
 class HotelCategoryViewSet(viewsets.ModelViewSet):
     queryset = HotelCategory.objects.all()
