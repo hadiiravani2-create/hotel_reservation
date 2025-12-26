@@ -10,6 +10,8 @@ from django.http import JsonResponse
 
 # Third-party imports
 from rest_framework.views import APIView
+from rest_framework.decorators import api_view, permission_classes, authentication_classes
+from rest_framework.permissions import AllowAny
 from rest_framework.response import Response
 from rest_framework import status
 from jdatetime import date as jdate, timedelta
@@ -25,6 +27,7 @@ from .serializers import (
     PriceQuoteOutputSerializer
 )
 from reservations.serializers import PriceQuoteMultiRoomInputSerializer
+
 
 # --- Helper Function for Sanitization ---
 def clean_int(value):
@@ -57,6 +60,90 @@ def to_english_digits(text):
     english_nums = '0123456789'
     trans_table = str.maketrans(persian_nums + arabic_nums, english_nums * 2)
     return str(text).translate(trans_table)
+
+# pricing/views.py
+
+@api_view(['GET'])
+@authentication_classes([])
+@permission_classes([AllowAny])
+def get_room_calendar(request, room_id):
+    """
+    Returns daily price and availability for a specific room AND board type.
+    """
+    try:
+        year = int(request.GET.get('year'))
+        month = int(request.GET.get('month'))
+        # دریافت شناسه برد از کوئری پارامترها
+        board_type_id = request.GET.get('board_type_id')
+    except (TypeError, ValueError):
+        today = jdate.today()
+        year, month = today.year, today.month
+        board_type_id = None
+
+    try:
+        start_date = jdate(year, month, 1)
+        if month <= 6:
+            days_in_month = 31
+        elif month <= 11:
+            days_in_month = 30
+        else:
+            days_in_month = 29 if not start_date.isleap() else 30
+        
+        end_date = jdate(year, month, days_in_month)
+    except ValueError:
+        return Response({"error": "Invalid date"}, status=400)
+    
+    start_str = start_date.isoformat()
+    end_str = end_date.isoformat()
+
+    # --- اصلاح فیلتر قیمت ---
+    price_qs = Price.objects.filter(
+        room_type_id=room_id,
+        date__range=[start_str, end_str]
+    )
+    
+    # اگر برد خاصی انتخاب شده، فیلتر کن
+    if board_type_id:
+        price_qs = price_qs.filter(board_type_id=board_type_id)
+    else:
+        # اگر انتخاب نشده، اولین برد موجود را برگردان (یا منطق پیش‌فرض خودتان)
+        # برای جلوگیری از تداخل، بهتر است همیشه برد ارسال شود.
+        pass
+
+    prices = price_qs.values('date', 'price_per_night')
+    
+    availabilities = Availability.objects.filter(
+        room_type_id=room_id,
+        date__range=[start_str, end_str]
+    ).values('date', 'quantity')
+
+    price_map = {str(p['date']): p['price_per_night'] for p in prices}
+    avail_map = {str(a['date']): a['quantity'] for a in availabilities}
+
+    calendar_data = []
+    current_jalali = start_date
+    
+    for i in range(days_in_month):
+        date_str_jalali = current_jalali.isoformat() 
+        
+        qty = avail_map.get(date_str_jalali, 0)
+        price = price_map.get(date_str_jalali, 0)
+        
+        is_available = qty > 0 and price > 0
+        
+        status_text = f"{price:,}" if is_available else "تکمیل"
+        
+        calendar_data.append({
+            "date": date_str_jalali,
+            "day": current_jalali.day,
+            "price": price if is_available else None,
+            "is_available": is_available,
+            "status_text": status_text
+        })
+        
+        current_jalali += timedelta(days=1)
+
+    return Response(calendar_data)
 
 class HotelSearchAPIView(APIView):
     def get(self, request):

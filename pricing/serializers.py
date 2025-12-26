@@ -32,6 +32,12 @@ class PriceQuoteInputSerializer(serializers.Serializer):
     children = serializers.IntegerField(required=False, default=0)
 
 
+class RoomCalendarSerializer(serializers.Serializer):
+    date = serializers.CharField()
+    price = serializers.IntegerField(allow_null=True)
+    is_available = serializers.BooleanField()
+    status_text = serializers.CharField()
+
 class PriceQuoteOutputSerializer(serializers.Serializer):
     room_name = serializers.CharField()
     hotel_name = serializers.CharField()
