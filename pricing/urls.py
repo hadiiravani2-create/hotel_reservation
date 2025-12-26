@@ -13,4 +13,5 @@ urlpatterns = [
     
     path('api/calculate-price/', views.PriceQuoteAPIView.as_view(), name='price_quote_api'),
     path('api/calculate-multi-price/', views.PriceQuoteMultiRoomAPIView.as_view(), name='price_quote_multi_api'),
+    path('admin/calendar-pricing/', views.calendar_pricing_view, name='calendar_pricing'),
 ]

@@ -1,11 +1,10 @@
 # pricing/admin.py
-# version: 2.0.1
-# Feature: Added search and autocomplete fields for better user experience.
-# Note: Added price_formatter.js to PriceAdmin.Media
+# version: 2.1.0
+# FIX: Merged duplicate PriceAdmin definitions and added Calendar View link.
 
 from django.contrib import admin
-from .models import Availability , Price
-from .forms import AvailabilityRangeForm , PriceRangeForm
+from .models import Availability, Price
+from .forms import AvailabilityRangeForm, PriceRangeForm
 from datetime import timedelta
 from django.urls import reverse
 from django.utils.html import format_html
@@ -23,7 +22,6 @@ class AvailabilityAdmin(admin.ModelAdmin):
         return obj.room_type.hotel.name
 
     class Media:
-        # فایل جاوا اسکریپت سفارشی را به صفحه ادمین اضافه می‌کنیم
         js = ("admin/js/availability_form.js",)
 
     def save_model(self, request, obj, form, change):
@@ -48,13 +46,15 @@ class PriceAdmin(admin.ModelAdmin):
     list_filter = ('room_type__hotel', 'date', 'board_type')
     search_fields = ('room_type__name', 'room_type__hotel__name')
     autocomplete_fields = ('room_type', 'board_type')
+    
+    # [GEM-UPDATE] Added change list template to inject "Calendar View" button
+    change_list_template = "admin/pricing/price_change_list.html"
 
     @admin.display(description='هتل', ordering='room_type__hotel')
     def get_hotel_name(self, obj):
         return obj.room_type.hotel.name
 
     class Media:
-        # ADDED: Load the price formatter script alongside the existing script
         js = ("admin/js/availability_form.js", "admin/js/price_formatter.js",)
 
     def save_model(self, request, obj, form, change):
@@ -66,6 +66,7 @@ class PriceAdmin(admin.ModelAdmin):
         extra_person_price = form.cleaned_data['extra_person_price']
         child_price = form.cleaned_data['child_price']
         board_type = form.cleaned_data['board_type'] 
+        
         current_date = start_date
         while current_date <= end_date:
             Price.objects.update_or_create(

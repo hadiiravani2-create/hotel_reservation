@@ -1,6 +1,7 @@
 # hotels/serializers.py
-# version: 2.0.0
-# FIX: REMOVED try/except block. We force the import to reveal the TRUE underlying error (Circular Import or Model Error).
+# version: 2.1.1
+# FIX: Robust handling of None values in price calculation (TypeError fix).
+#      Added safety checks for 'current_total_extra' and 'current_total_child'.
 
 from rest_framework import serializers
 from django.db.models import Count, Min, Avg
@@ -14,9 +15,6 @@ from .models import (
     HotelImage, RoomImage
 )
 
-# --- CRITICAL CHANGE: Direct Import ---
-# We removed the try/except block. 
-# If this line fails, it means there is an error in 'attractions/models.py' that we MUST see to fix.
 from attractions.models import Attraction, AttractionGallery
 
 from pricing.models import Availability, Price
@@ -54,7 +52,6 @@ def calculate_hotel_min_price(hotel_obj, context):
     found_price = False
     user = request.user if request else None
     
-    # Iterate over all room types and board types to find the lowest price
     for room in hotel_obj.room_types.all():
         for board in BoardType.objects.all():
             price_info = _get_daily_price_for_user(room, board, target_date, user)
@@ -112,7 +109,6 @@ class RoomCategorySerializer(serializers.ModelSerializer):
 # ==============================================================================
 
 class AttractionSerializer(serializers.ModelSerializer):
-    # This relies on the AttractionGallerySerializer defined above
     images = AttractionGallerySerializer(many=True, read_only=True)
     
     class Meta:
@@ -128,6 +124,8 @@ class CitySerializer(serializers.ModelSerializer):
 class PricedBoardTypeSerializer(serializers.Serializer):
     board_type = BoardTypeSerializer(read_only=True)
     total_price = serializers.DecimalField(max_digits=20, decimal_places=0, read_only=True)
+    total_extra_adult_price = serializers.DecimalField(max_digits=20, decimal_places=0, read_only=True)
+    total_child_price = serializers.DecimalField(max_digits=20, decimal_places=0, read_only=True)
 
 class RoomTypeSerializer(serializers.ModelSerializer):
     amenities = AmenitySerializer(many=True, read_only=True)
@@ -137,6 +135,7 @@ class RoomTypeSerializer(serializers.ModelSerializer):
     
     extra_adult_price = serializers.SerializerMethodField()
     child_price = serializers.SerializerMethodField()
+    
     is_available = serializers.SerializerMethodField()
     availability_quantity = serializers.SerializerMethodField()
     priced_board_types = serializers.SerializerMethodField()
@@ -216,18 +215,32 @@ class RoomTypeSerializer(serializers.ModelSerializer):
         
         priced_boards = []
         for board_type in BoardType.objects.all():
-            current_total_price, is_calculable = Decimal(0), True
+            current_total_price = Decimal(0)
+            current_total_extra = Decimal(0) 
+            current_total_child = Decimal(0) 
+            is_calculable = True
+            
             for date in date_range:
                 price_info = _get_daily_price_for_user(obj, board_type, date, user)
+                
                 if price_info and 'price_per_night' in price_info:
-                    current_total_price += price_info['price_per_night']
+                    # [GEM-UPDATE] Added 'or 0' to prevent TypeError if value is None
+                    current_total_price += (price_info['price_per_night'] or 0)
+                    current_total_extra += (price_info.get('extra_person_price') or 0)
+                    current_total_child += (price_info.get('child_price') or 0)
                 else:
                     is_calculable = False; break
             
             if is_calculable and current_total_price > 0:
-                priced_boards.append({'board_type': board_type, 'total_price': current_total_price})
+                priced_boards.append({
+                    'board_type': board_type, 
+                    'total_price': current_total_price,
+                    'total_extra_adult_price': current_total_extra,
+                    'total_child_price': current_total_child
+                })
         
         return PricedBoardTypeSerializer(priced_boards, many=True).data
+
 class HotelSerializer(serializers.ModelSerializer):
     city = CitySerializer(read_only=True)
     amenities = AmenitySerializer(many=True, read_only=True)
@@ -279,5 +292,4 @@ class SuggestedHotelSerializer(serializers.ModelSerializer):
         return None
 
     def get_min_price(self, obj):
-        # Calculate price for TODAY (since homepage usually has no date selected yet)
         return calculate_hotel_min_price(obj, self.context)

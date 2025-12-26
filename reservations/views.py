@@ -392,7 +392,14 @@ class CreateBookingAPIView(APIView):
             return Response({"error": error_message}, status=status.HTTP_400_BAD_REQUEST)
             
         return Response(
-            {"success": True, "booking_code": booking.booking_code, "total_price": booking.total_price},
+            {
+                "success": True, 
+                "booking_code": booking.booking_code, 
+                "total_price": booking.total_price,
+                # Logic: If hotel is online -> 'online' (User goes to payment page)
+                #        If hotel is offline -> 'offline' (User goes to success/tracking page)
+                "payment_type": 'online' if hotel.is_online else 'offline'
+            },
             status=status.HTTP_201_CREATED
         )
 

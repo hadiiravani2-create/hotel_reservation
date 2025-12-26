@@ -28,6 +28,9 @@ def _get_daily_price_for_user(room_type: RoomType, board_type: BoardType, date, 
         'child_price': public_price_obj.child_price,
     }
 
+    if not user or not user.is_authenticated:
+        return final_price
+
     agency_user = user.agency_profile if hasattr(user, 'agency_profile') else None
     if not user.is_authenticated or not agency_user:
         return final_price

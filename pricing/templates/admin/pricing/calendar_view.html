@@ -1,0 +1,327 @@
+{% extends "admin/base_site.html" %}
+{% load i18n static %}
+
+{% block extrahead %}
+{{ block.super }}
+<style>
+    /* کانتینر اصلی */
+    .table-container {
+        border: 1px solid #ddd;
+        border-radius: 5px;
+        background: #fff;
+        padding-bottom: 60px; /* فضا برای دکمه شناور */
+    }
+
+    .calendar-table { 
+        width: 100%; 
+        border-collapse: separate; 
+        border-spacing: 0;
+        table-layout: fixed; 
+    }
+
+    .calendar-table th, .calendar-table td { 
+        border-right: 1px solid #eee; 
+        border-bottom: 1px solid #eee; 
+        padding: 5px; 
+        text-align: center; 
+        height: 40px;
+    }
+
+    /* --- مدیریت ستون‌های مخفی/نمایان (منطق ۱۰ روزه) --- */
+    .col-group-1, .col-group-2, .col-group-3 { display: none; }
+    .show-g1 .col-group-1 { display: table-cell; }
+    .show-g2 .col-group-2 { display: table-cell; }
+    .show-g3 .col-group-3 { display: table-cell; }
+
+    /* --- هدرها --- */
+    .calendar-table thead th {
+        background: #343a40;
+        color: white;
+        padding: 10px 0;
+        font-size: 13px;
+    }
+
+    /* --- ستون نام اتاق --- */
+    .room-col {
+        width: 180px; 
+        background: #f8f9fa;
+        border-left: 2px solid #ddd;
+        text-align: right;
+        padding: 10px;
+        vertical-align: middle;
+    }
+
+    /* --- استایل اینپوت‌ها --- */
+    .calendar-table input { 
+        width: 100%; 
+        height: 100%;
+        text-align: center; 
+        border: none;
+        background: transparent;
+        font-family: monospace;
+        font-size: 13px;
+        direction: ltr; /* برای نمایش صحیح اعداد */
+    }
+    .calendar-table input:focus {
+        background: #fff;
+        outline: 2px solid #007bff;
+        z-index: 5;
+        position: relative;
+    }
+
+    /* رنگ‌بندی ردیف‌ها */
+    .row-avail { background-color: #e3f2fd; }
+    .row-avail input { color: #0056b3; font-weight: bold; }
+    
+    .row-price { background-color: #fff; }
+    .row-price input { color: #28a745; }
+    
+    .row-extra { background-color: #fafafa; display: none; } 
+    .row-extra input { color: #6c757d; }
+
+    /* --- تب‌های بالا --- */
+    .decade-tabs {
+        display: flex;
+        margin-bottom: 0;
+        background: #f1f1f1;
+        border-bottom: 1px solid #ddd;
+        border-radius: 5px 5px 0 0;
+        overflow: hidden;
+    }
+    .decade-tab {
+        flex: 1;
+        padding: 15px;
+        text-align: center;
+        cursor: pointer;
+        font-weight: bold;
+        color: #555;
+        transition: background 0.2s;
+        border-left: 1px solid #ddd;
+    }
+    .decade-tab:hover { background: #e9ecef; }
+    .decade-tab.active { background: #007bff; color: white; }
+    .decade-tab:last-child { border-left: none; }
+
+    /* دکمه‌های کنترل */
+    .toggle-btn {
+        cursor: pointer;
+        color: #007bff;
+        font-weight: bold;
+        margin-left: 5px;
+        font-size: 16px;
+        display: inline-block;
+        width: 20px;
+        text-align: center;
+    }
+
+    /* فیلترها */
+    .filters { display: flex; gap: 15px; background: #fff; padding: 15px; margin-bottom: 20px; border-radius: 5px; border: 1px solid #ddd; align-items: flex-end; }
+    .filter-item label { display: block; font-size: 11px; margin-bottom: 5px; color: #666; }
+    .filter-item select { padding: 8px; border: 1px solid #ccc; border-radius: 4px; min-width: 140px; }
+
+    /* دکمه ذخیره */
+    .floating-save {
+        position: fixed;
+        bottom: 30px;
+        left: 30px;
+        background: #28a745;
+        color: white;
+        padding: 12px 25px;
+        border-radius: 50px;
+        box-shadow: 0 4px 15px rgba(0,0,0,0.3);
+        border: none;
+        font-size: 16px;
+        cursor: pointer;
+        z-index: 100;
+        transition: transform 0.2s;
+    }
+    .floating-save:hover { transform: scale(1.05); background: #218838; }
+</style>
+
+<script>
+    // 1. تابع تغییر دهه‌ها
+    function switchDecade(decadeNum) {
+        const table = document.getElementById('mainTable');
+        table.className = 'calendar-table show-g' + decadeNum;
+        document.querySelectorAll('.decade-tab').forEach(t => t.classList.remove('active'));
+        document.getElementById('tab-' + decadeNum).classList.add('active');
+    }
+
+    // 2. تابع باز و بسته کردن جزئیات
+    function toggleDetails(roomId) {
+        const rows = document.querySelectorAll(`.details-${roomId}`);
+        const btn = document.getElementById(`btn-${roomId}`);
+        let isHidden = true;
+        rows.forEach(row => {
+            if (row.style.display === 'none' || row.style.display === '') {
+                row.style.display = 'table-row';
+                isHidden = false;
+            } else {
+                row.style.display = 'none';
+            }
+        });
+        btn.innerHTML = !isHidden ? '−' : '+';
+        btn.style.color = !isHidden ? 'red' : '#007bff';
+    }
+
+    // 3. فرمت‌دهی پول با ویرگول (سه رقم سه رقم)
+    function formatCurrency(input) {
+        // حذف هر چیزی غیر از عدد
+        let val = input.value.replace(/[^0-9]/g, '');
+        if (val === '') {
+            input.value = '';
+            return;
+        }
+        // اضافه کردن ویرگول
+        input.value = Number(val).toLocaleString('en-US');
+    }
+
+    // اجرای فرمت‌دهی اولیه هنگام لود صفحه
+    window.onload = function() {
+        switchDecade(1);
+        
+        // پیدا کردن تمام اینپوت‌های قیمت و فرمت کردن آنها
+        document.querySelectorAll('.price-input').forEach(input => {
+            formatCurrency(input);
+        });
+    };
+</script>
+{% endblock %}
+
+{% block content %}
+<div id="content-main">
+    <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 15px;">
+        <h1>مدیریت قیمت و موجودی (نمای ۱۰ روزه)</h1>
+        <a href="{% url 'admin:pricing_price_changelist' %}" style="text-decoration: none; color: #666;">← بازگشت</a>
+    </div>
+
+    <form method="GET" class="filters">
+        <div class="filter-item">
+            <label>سال</label>
+            <select name="year" onchange="this.form.submit()">
+                {% for y in years %}
+                <option value="{{ y }}" {% if y == selected_year %}selected{% endif %}>{{ y }}</option>
+                {% endfor %}
+            </select>
+        </div>
+        <div class="filter-item">
+            <label>ماه</label>
+            <select name="month" onchange="this.form.submit()">
+                {% for m_num, m_name in months %}
+                <option value="{{ m_num }}" {% if m_num == selected_month %}selected{% endif %}>{{ m_name }}</option>
+                {% endfor %}
+            </select>
+        </div>
+        <div class="filter-item">
+            <label>هتل</label>
+            <select name="hotel_id" onchange="this.form.submit()">
+                {% for h in hotels %}
+                <option value="{{ h.id }}" {% if h.id == selected_hotel_id %}selected{% endif %}>{{ h.name }}</option>
+                {% endfor %}
+            </select>
+        </div>
+        <div class="filter-item">
+            <label>نوع سرویس (برد)</label>
+            <select name="board_type_id" onchange="this.form.submit()">
+                {% for b in board_types %}
+                <option value="{{ b.id }}" {% if b.id == selected_board_id %}selected{% endif %}>{{ b.name }}</option>
+                {% endfor %}
+            </select>
+        </div>
+    </form>
+
+    <form method="POST">
+        {% csrf_token %}
+        
+        <div class="decade-tabs">
+            <div id="tab-1" class="decade-tab active" onclick="switchDecade(1)">دهه اول</div>
+            <div id="tab-2" class="decade-tab" onclick="switchDecade(2)">دهه دوم</div>
+            <div id="tab-3" class="decade-tab" onclick="switchDecade(3)">دهه سوم</div>
+        </div>
+
+        <div class="table-container">
+            <table id="mainTable" class="calendar-table show-g1">
+                <thead>
+                    <tr>
+                        <th class="room-col">اتاق / روز</th>
+                        {% for day in month_days %}
+                            <th class="{% if forloop.counter <= 10 %}col-group-1{% elif forloop.counter <= 20 %}col-group-2{% else %}col-group-3{% endif %}">
+                                {{ day }}
+                            </th>
+                        {% endfor %}
+                    </tr>
+                </thead>
+                <tbody>
+                    {% for room in room_data %}
+                        <tr class="row-avail">
+                            <td class="room-col">
+                                <span id="btn-{{ room.id }}" class="toggle-btn" onclick="toggleDetails({{ room.id }})">+</span>
+                                <span>{{ room.name }}</span>
+                                <div style="font-size: 10px; color: #007bff; margin-top: 2px;">موجودی</div>
+                            </td>
+                            {% for day_info in room.days %}
+                                <td class="{% if forloop.counter <= 10 %}col-group-1{% elif forloop.counter <= 20 %}col-group-2{% else %}col-group-3{% endif %}">
+                                    <input type="number" name="avail_{{ room.id }}_{{ day_info.date_str }}" 
+                                           value="{{ day_info.availability }}" min="0" placeholder="0">
+                                </td>
+                            {% endfor %}
+                        </tr>
+                        
+                        <tr class="row-price">
+                            <td class="room-col">
+                                <span style="font-size: 11px; color: #28a745; padding-right: 20px;">قیمت پایه</span>
+                            </td>
+                            {% for day_info in room.days %}
+                                <td class="{% if forloop.counter <= 10 %}col-group-1{% elif forloop.counter <= 20 %}col-group-2{% else %}col-group-3{% endif %}">
+                                    <input type="text" 
+                                           class="price-input" 
+                                           onkeyup="formatCurrency(this)"
+                                           name="price_base_{{ room.id }}_{{ day_info.date_str }}" 
+                                           value="{{ day_info.price_base|default_if_none:'' }}" 
+                                           placeholder="-">
+                                </td>
+                            {% endfor %}
+                        </tr>
+
+                        <tr class="row-extra details-{{ room.id }}">
+                            <td class="room-col">
+                                <span style="font-size: 11px; color: #6c757d; padding-right: 20px;">+ نفر اضافه</span>
+                            </td>
+                            {% for day_info in room.days %}
+                                <td class="{% if forloop.counter <= 10 %}col-group-1{% elif forloop.counter <= 20 %}col-group-2{% else %}col-group-3{% endif %}">
+                                    <input type="text" 
+                                           class="price-input"
+                                           onkeyup="formatCurrency(this)"
+                                           name="price_extra_{{ room.id }}_{{ day_info.date_str }}" 
+                                           value="{{ day_info.price_extra|default_if_none:'' }}" 
+                                           placeholder="-">
+                                </td>
+                            {% endfor %}
+                        </tr>
+
+                        <tr class="row-extra details-{{ room.id }}">
+                            <td class="room-col" style="border-bottom: 2px solid #ccc;">
+                                <span style="font-size: 11px; color: #6c757d; padding-right: 20px;">+ کودک</span>
+                            </td>
+                            {% for day_info in room.days %}
+                                <td class="{% if forloop.counter <= 10 %}col-group-1{% elif forloop.counter <= 20 %}col-group-2{% else %}col-group-3{% endif %}" style="border-bottom: 2px solid #ccc;">
+                                    <input type="text" 
+                                           class="price-input"
+                                           onkeyup="formatCurrency(this)"
+                                           name="price_child_{{ room.id }}_{{ day_info.date_str }}" 
+                                           value="{{ day_info.price_child|default_if_none:'' }}" 
+                                           placeholder="-">
+                                </td>
+                            {% endfor %}
+                        </tr>
+                    {% endfor %}
+                </tbody>
+            </table>
+        </div>
+        
+        <button type="submit" class="floating-save">
+            💾 ذخیره تغییرات
+        </button>
+    </form>
+</div>
+{% endblock %}

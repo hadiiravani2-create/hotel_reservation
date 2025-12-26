@@ -1,74 +1,92 @@
-body {
-    direction: rtl;
-    text-align: right;
+/* static/css/admin_rtl.css */
+
+/* --- تنظیمات کلی بدنه --- */
+body, .main-header, .content-wrapper, .main-footer {
+    direction: rtl !important;
+    text-align: right !important;
+    font-family: "Vazir", "Tahoma", sans-serif; /* اگر فونت وزیر دارید */
 }
 
-/* Sidebar */
+/* --- اصلاح سایدبار (منوی سمت راست) --- */
 .main-sidebar {
-    right: 0;
-    left: auto;
+    right: 0 !important;
+    left: auto !important;
 }
 
 .content-wrapper, .main-footer, .main-header {
-    margin-right: 250px;
-    margin-left: 0;
+    margin-right: 250px !important; /* عرض سایدبار */
+    margin-left: 0 !important;
 }
 
-.nav-sidebar .nav-link p {
-    display: inline;
+/* در حالت موبایل یا بسته بودن منو */
+.sidebar-collapse .content-wrapper, 
+.sidebar-collapse .main-footer, 
+.sidebar-collapse .main-header {
+    margin-right: 4.6rem !important;
 }
 
-.nav-sidebar .nav-link i.right {
-    right: auto;
+/* آیکون‌ها و متن‌های منو */
+.nav-sidebar .nav-item > .nav-link {
+    display: flex;
+    align-items: center;
+}
+.nav-sidebar .nav-icon {
+    margin-left: 10px !important;
+    margin-right: 0 !important;
+}
+.nav-sidebar .right {
     left: 1rem;
+    right: auto;
 }
 
-/* Header and User menu */
+/* --- اصلاح فرم‌ها و ورودی‌ها --- */
+.form-control {
+    text-align: right;
+}
+
+/* اصلاح لیبل‌های فیلدها */
+.col-form-label {
+    text-align: left !important; /* در Jazzmin لیبل‌ها معمولا سمت چپ فیلد هستند */
+    padding-left: 15px;
+}
+
+/* --- اصلاح جداول (شامل جدول تقویمی ما) --- */
+table {
+    direction: rtl;
+}
+th, td {
+    text-align: right !important;
+}
+
+/* --- اصلاح هدر بالای صفحه --- */
 .navbar-nav {
     padding-right: 0;
+    flex-direction: row;
 }
-
-.navbar-expand .navbar-nav:first-child {
-    margin-right: 0 !important;
-    margin-left: auto !important;
-}
-
-/* Breadcrumbs */
-.breadcrumb {
-    padding: .75rem 1rem;
+.navbar-nav .nav-item {
     float: right;
 }
-
-.content-header h1 {
-    float: right;
+.ml-auto {
+    margin-right: auto !important;
+    margin-left: 0 !important;
 }
 
-/* Form fields and labels */
-label:not(.form-check-label):not(.custom-file-label) {
+/* --- اصلاحات اختصاصی برای Select2 (منوهای کشویی جستجو دار) --- */
+.select2-container--default .select2-selection--single .select2-selection__rendered {
+    text-align: right;
+    padding-right: 8px;
+}
+.select2-container--default .select2-results__option {
     text-align: right;
 }
 
-.form-group {
-    text-align: right;
+/* --- فیکس کردن نمادهای تیک و ضربدر در لیست‌ها --- */
+img[src*="icon-yes.svg"], img[src*="icon-no.svg"] {
+    float: none;
 }
 
-.form-actions {
-    text-align: left;
-}
-
-.card-header > .card-tools {
-    float: left;
-    margin-right: 0;
-}
-
-/* Tables */
-th {
-    text-align: right;
-}
-
-/* Fixes for smaller screens */
-@media (max-width: 767.98px) {
-    .main-header {
-        margin-right: 0;
-    }
+/* --- اصلاح دکمه‌های شناور (Floating Actions) --- */
+.floating-save {
+    right: auto;
+    left: 30px; /* دکمه ذخیره ما باید سمت چپ باشد */
 }
