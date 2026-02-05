@@ -82,10 +82,19 @@ class WalletTransactionAdmin(admin.ModelAdmin):
 @admin.register(CustomUser)
 class CustomUserAdmin(UserAdmin):
     """Admin configuration for the custom user model."""
-    list_display = ('username', 'email', 'first_name', 'last_name', 'is_staff', 'agency', 'agency_role')
+    # 1. نمایش موبایل در لیست کاربران (ستون‌ها)
+    list_display = ('username', 'mobile', 'email', 'first_name', 'last_name', 'is_staff', 'agency', 'agency_role')
+    
     list_filter = ('is_staff', 'is_superuser', 'is_active', 'agency', 'agency_role')
+    
+    # 2. نمایش موبایل در فرم ویرایش کاربر
     fieldsets = UserAdmin.fieldsets + (
-        ('اطلاعات آژانس و نقش', {'fields': ('agency', 'agency_role')}),
+        ('اطلاعات تکمیلی', {'fields': ('mobile', 'agency', 'agency_role')}),
+    )
+    
+    # 3. نمایش موبایل در فرم افزودن کاربر جدید
+    add_fieldsets = UserAdmin.add_fieldsets + (
+        ('اطلاعات تکمیلی', {'fields': ('mobile', 'email', 'first_name', 'last_name', 'agency', 'agency_role')}),
     )
     
 @admin.register(SiteSettings)

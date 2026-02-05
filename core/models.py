@@ -8,10 +8,6 @@ from django.db import models
 from django.db.models import Sum
 from django.conf import settings
 
-# REMOVED: try/except block for importing Booking. String reference is sufficient.
-
-# --- NEW ABSTRACT MODEL ---
-# This must be defined BEFORE any other model imports it.
 class ImageMetadata(models.Model):
     """
     Abstract base class for models that require image metadata such as caption and display order.
@@ -24,7 +20,6 @@ class ImageMetadata(models.Model):
         abstract = True
         ordering = ['order']
 
-# --- EXISTING MODELS ---
 
 class AgencyUserRole(models.Model):
     ROLE_CHOICES = (
@@ -41,7 +36,13 @@ class AgencyUserRole(models.Model):
         return self.get_name_display()
 
 class CustomUser(AbstractUser):
-    # Using string reference for Agency to avoid circular import with agencies app
+    mobile = models.CharField(
+        max_length=11, 
+        unique=True,
+        blank=True,
+        verbose_name="شماره موبایل", 
+        help_text="فرمت: 09123456789"
+    )
     agency = models.ForeignKey('agencies.Agency', on_delete=models.SET_NULL, null=True, blank=True, related_name="users", verbose_name="آژانس")
     agency_role = models.ForeignKey(AgencyUserRole, on_delete=models.SET_NULL, null=True, blank=True, verbose_name="نقش در آژانس")
 
