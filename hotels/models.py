@@ -131,6 +131,7 @@ class RoomType(models.Model):
     # Model defining a specific type of room within a hotel.
     hotel = models.ForeignKey(Hotel, on_delete=models.CASCADE, related_name="room_types", verbose_name="هتل")
     name = models.CharField(max_length=100, verbose_name="نام نوع اتاق")
+    priority = models.IntegerField(default=0, verbose_name="اولویت نمایش", help_text="عدد کمتر = نمایش بالاتر")
     code = models.CharField(max_length=20, unique=True, verbose_name="کد نوع اتاق")
     description = models.TextField(verbose_name="توضیحات نوع اتاق", null=True, blank=True)
     base_capacity = models.PositiveSmallIntegerField(default=2, verbose_name="ظرفیت پایه (نفر)")
@@ -150,6 +151,7 @@ class RoomType(models.Model):
         verbose_name = "نوع اتاق"
         verbose_name_plural = "انواع اتاق"
         unique_together = ('hotel', 'name') # Enforce unique room type name per hotel
+        ordering = ['priority', 'id']
 
     def __str__(self):
         return f"{self.name} - {self.hotel.name}"

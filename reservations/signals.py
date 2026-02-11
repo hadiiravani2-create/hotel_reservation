@@ -1,11 +1,16 @@
-# reservations/signals.py
-# version: 1.2.0
-# FEATURE: Added signal to handle automated status updates after payment verification.
-# CLEANUP: Corrected unreadable Persian comments and strings.
+# FILE: reservations/signals.py
+# version: 1.3.0
+# FEATURE: Implemented Reconciliation logic. Booking is confirmed only if total verified payments >= total price.
+# REFACTOR: Handles multiple offline payments for a single booking.
 
 from django.db.models.signals import post_save
 from django.dispatch import receiver
 import django.dispatch
+from django.db.models import Sum
+from django.db.models.functions import Coalesce
+from decimal import Decimal
+from django.contrib.contenttypes.models import ContentType
+
 from .models import Booking, PaymentConfirmation
 from notifications.tasks import send_booking_confirmation_email_task, send_sms_task
 from core.models import SiteSettings, WalletTransaction
@@ -65,33 +70,60 @@ def send_booking_notifications(sender, instance, created, **kwargs):
 def handle_payment_verification(sender, instance, **kwargs):
     """
     Signal handler that triggers after a PaymentConfirmation is saved.
-    If 'is_verified' is True, it updates the status AND paid_amount of the related object.
+    It recalculates the total paid amount and updates the status based on reconciliation logic.
     """
-    # Proceed only if the payment has been marked as verified and has a related object
-    if instance.is_verified and instance.content_object:
-        related_object = instance.content_object
+    # فقط اگر موجودیت مرتبط وجود داشته باشد ادامه بده
+    if not instance.content_object:
+        return
 
-        # Case 1: The payment is for a Booking
-        if isinstance(related_object, Booking):
-            # Update booking status if it's in a state that can be confirmed by payment.
-            # This covers both 'pending' (online) and 'awaiting_confirmation' (offline)
-            if related_object.status == 'pending' or related_object.status == 'awaiting_confirmation':
-                related_object.status = 'confirmed'
-                
-                # --- START: PDF Data Fix (Save Paid Amount) ---
-                # Set the paid_amount from the verified payment amount
-                if instance.payment_amount and instance.payment_amount > 0:
-                    related_object.paid_amount = instance.payment_amount
-                else:
-                    # Fallback if payment_amount wasn't entered by operator
-                    related_object.paid_amount = related_object.total_price 
-                
-                related_object.save(update_fields=['status', 'paid_amount'])
-                # --- END: PDF Data Fix ---
+    related_object = instance.content_object
 
-        # Case 2: The payment is for a WalletTransaction (deposit)
-        elif isinstance(related_object, WalletTransaction):
-            # Update transaction status if it's currently pending
-            if related_object.status == 'pending':
-                related_object.status = 'completed'
-                related_object.save(update_fields=['status'])
+    # --- Case 1: The payment is for a Booking (Reconciliation Logic) ---
+    if isinstance(related_object, Booking):
+        booking = related_object
+        
+        # محاسبه مجموع تمام پرداخت‌های تایید شده برای این رزرو
+        # از filter روی خود مدل PaymentConfirmation استفاده می‌کنیم تا به GenericRelation در مدل Booking وابسته نباشیم (برای اطمینان)
+        content_type = ContentType.objects.get_for_model(Booking)
+        total_verified_paid = PaymentConfirmation.objects.filter(
+            content_type=content_type,
+            object_id=booking.id,
+            is_verified=True
+        ).aggregate(
+            total=Coalesce(Sum('payment_amount'), Decimal(0))
+        )['total']
+
+        # به روز رسانی مبلغ پرداخت شده در رزرو
+        if booking.paid_amount != total_verified_paid:
+            booking.paid_amount = total_verified_paid
+            # فعلاً فقط مبلغ را ذخیره می‌کنیم، وضعیت را در ادامه بررسی می‌کنیم
+            booking.save(update_fields=['paid_amount'])
+
+        # --- ماشین وضعیت (State Machine) ---
+        
+        # 1. اگر کل مبلغ (یا بیشتر) پرداخت شده است -> تایید نهایی
+        if booking.paid_amount >= booking.total_price:
+            if booking.status != 'confirmed':
+                booking.status = 'confirmed'
+                booking.save(update_fields=['status'])
+                # سیگنال send_booking_notifications به طور خودکار اجرا خواهد شد
+        
+        # 2. اگر بخشی از مبلغ پرداخت شده اما هنوز بدهکار است -> منتظر تایید (یا منتظر پرداخت مابقی)
+        elif booking.paid_amount > 0:
+            if booking.status == 'pending':
+                booking.status = 'awaiting_confirmation'
+                booking.save(update_fields=['status'])
+                
+        # نکته: اگر پرداخت رد شد (Verified=False) و مجموع پرداختی صفر شد، وضعیت تغییری نمی‌کند
+        # تا کاربر بتواند مجدداً تلاش کند یا با همان وضعیت قبل بماند.
+
+    # --- Case 2: The payment is for a WalletTransaction (deposit) ---
+    elif isinstance(related_object, WalletTransaction):
+        # برای کیف پول منطق ساده‌تر است: اگر تایید شد، وضعیت تراکنش تکمیل می‌شود
+        if instance.is_verified and related_object.status == 'pending':
+            related_object.status = 'completed'
+            related_object.save(update_fields=['status'])
+            
+            # موجودی کیف پول هم باید آپدیت شود (معمولاً در سیگنالِ خودِ تراکنش هندل می‌شود، اما اینجا هم می‌توان تریگر کرد)
+            # فرض بر این است که سیگنال post_save روی WalletTransaction موجودی را اضافه می‌کند
+            # یا متدی برای اعمال تراکنش وجود دارد.

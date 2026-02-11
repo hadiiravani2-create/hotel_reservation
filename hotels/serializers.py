@@ -144,7 +144,7 @@ class RoomTypeSerializer(serializers.ModelSerializer):
     class Meta:
         model = RoomType
         fields = [
-            'id', 'name', 'code', 'description', 'base_capacity', 
+            'id', 'name', 'priority', 'code', 'description', 'base_capacity', 
             'extra_capacity', 'child_capacity', 
             'extra_adult_price', 'child_price', 
             'amenities', 'images', 
@@ -267,12 +267,28 @@ class HotelSerializer(serializers.ModelSerializer):
 
     def get_available_rooms(self, obj):
         if not self.context.get('check_in') or not self.context.get('duration'): return []
+        
+        # دریافت داده‌های اتاق‌ها (شامل فیلد priority که در RoomTypeSerializer اضافه کردیم)
         all_rooms_data = RoomTypeSerializer(obj.room_types.all(), many=True, context=self.context).data
+        
+        # فیلتر کردن اتاق‌های در دسترس
         available_rooms = [room for room in all_rooms_data if room.get('is_available')]
+        
         def sort_key(room):
+            # 1. تعریف متغیر priority (این خط احتمالا جا افتاده بود)
+            # اگر priority تعریف نشده باشد، مقدار پیش‌فرض 0 در نظر گرفته می‌شود
+            priority = room.get('priority', 0)
+            
+            # 2. محاسبه ارزان‌ترین قیمت برای مرتب‌سازی دوم
             prices = [item['total_price'] for item in room.get('priced_board_types', [])]
-            return min(prices) if prices else float('inf') 
+            min_price = min(prices) if prices else float('inf')
+            
+            # بازگشت تاپل برای مرتب‌سازی: اول اولویت، بعد قیمت
+            return (priority, min_price)
+            
+        # اعمال مرتب‌سازی
         available_rooms.sort(key=sort_key)
+        
         return available_rooms
 
 class SuggestedHotelSerializer(serializers.ModelSerializer):
@@ -293,3 +309,4 @@ class SuggestedHotelSerializer(serializers.ModelSerializer):
 
     def get_min_price(self, obj):
         return calculate_hotel_min_price(obj, self.context)
+

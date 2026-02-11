@@ -14,7 +14,7 @@ from django.core.exceptions import ValidationError
 import re
 from agencies.models import Agency
 from decimal import Decimal
-from django.contrib.contenttypes.fields import GenericForeignKey
+from django.contrib.contenttypes.fields import GenericForeignKey, GenericRelation
 from django.contrib.contenttypes.models import ContentType
 
 def generate_numeric_booking_code():
@@ -33,6 +33,7 @@ class Booking(models.Model):
         ('no_capacity', 'عدم ظرفیت'),
     )
     booking_code = models.CharField(max_length=8, default=generate_numeric_booking_code, unique=True, verbose_name="کد رزرو")
+    payment_confirmations = GenericRelation('PaymentConfirmation')
     user = models.ForeignKey(settings.AUTH_USER_MODEL, on_delete=models.SET_NULL, null=True, blank=True, related_name="bookings", verbose_name="کاربر رزرو کننده")
     check_in = jmodels.jDateField(verbose_name="تاریخ ورود")
     check_out = jmodels.jDateField(verbose_name="تاریخ خروج")
@@ -146,7 +147,7 @@ class PaymentConfirmation(models.Model):
     
     offline_bank = models.ForeignKey(OfflineBank, on_delete=models.PROTECT, verbose_name="حساب بانکی مقصد")
     
-    tracking_code = models.CharField(max_length=50, verbose_name="شماره پیگیری / ارجاع")
+    tracking_code = models.CharField(max_length=50, unique=True,  verbose_name="شماره پیگیری / ارجاع")
     payment_date = jmodels.jDateTimeField(verbose_name="تاریخ و ساعت پرداخت")
     payment_amount = models.DecimalField(max_digits=20, decimal_places=0, null=True, blank=True, verbose_name="مبلغ واریزی")
     

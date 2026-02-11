@@ -73,7 +73,7 @@ class HotelAdmin(admin.ModelAdmin):
 
 @admin.register(RoomType)
 class RoomTypeAdmin(admin.ModelAdmin):
-    list_display = ('name', 'hotel', 'base_capacity', 'price_per_night', 'manage_availability_button', 'manage_prices_button')
+    list_display = ('name', 'hotel', 'base_capacity', 'price_per_night', 'manage_availability_button', 'manage_prices_button', 'priority')
     list_filter = ('hotel', 'room_categories', 'bed_types')
     search_fields = ('name', 'hotel__name')
     inlines = [RoomImageInline]

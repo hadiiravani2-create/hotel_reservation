@@ -578,10 +578,14 @@ class OfflineBankListAPIView(generics.ListAPIView):
             return base_query.filter(hotel__isnull=True)
 
 class PaymentConfirmationAPIView(APIView):
-    """API view for submitting payment confirmation details."""
+    """
+    API view for submitting payment confirmation details.
+    Supports multiple payment submissions for a single booking (Reconciliation).
+    """
     authentication_classes = [TokenAuthentication]
     permission_classes = [AllowAny]
 
+    @transaction.atomic
     def post(self, request):
         serializer = PaymentConfirmationSerializer(data=request.data)
         
@@ -589,11 +593,20 @@ class PaymentConfirmationAPIView(APIView):
             return Response(serializer.errors, status=status.HTTP_400_BAD_REQUEST)
 
         confirmation = serializer.save()
+        related_object = confirmation.content_object
         
-        # --- START: New logic to enrich transaction description ---
-        # Check if the related object is a WalletTransaction
-        if isinstance(confirmation.content_object, WalletTransaction):
-            transaction = confirmation.content_object
+        # --- 1. Booking Logic: Immediate Status Update ---
+        if isinstance(related_object, Booking):
+            # اگر وضعیت رزرو "در انتظار پرداخت" است، آن را به "منتظر تایید" تغییر می‌دهیم
+            # تا رزرو توسط سیستم پاک نشود (Time-out) و اپراتور فرصت بررسی داشته باشد.
+            # اگر وضعیت قبلاً 'awaiting_confirmation' باشد (مثلاً پرداخت دوم)، تغییری لازم نیست.
+            if related_object.status == 'pending':
+                related_object.status = 'awaiting_confirmation'
+                related_object.save(update_fields=['status'])
+
+        # --- 2. Wallet Transaction Logic: Description Enrichment ---
+        elif isinstance(related_object, WalletTransaction):
+            transaction = related_object
             bank_name = confirmation.offline_bank.bank_name
             payment_time = confirmation.payment_date.strftime('%H:%M')
             payment_date_jalali = jdatetime.fromgregorian(date=confirmation.payment_date).strftime('%Y/%m/%d')
@@ -608,13 +621,12 @@ class PaymentConfirmationAPIView(APIView):
             # Update the transaction's description
             transaction.description = new_description
             transaction.save(update_fields=['description'])
-        # --- END: New logic ---
         
         return Response({
             "success": True, 
-            "message": "اطلاعات پرداخت شما با موفقیت ثبت شد و در حال بررسی است.", 
+            "message": "اطلاعات پرداخت ثبت شد. پس از بررسی و تایید مبلغ توسط کارشناسان، وضعیت رزرو به روز خواهد شد.", 
             "confirmation_id": confirmation.id
-        }, status=status.HTTP_201_CREATED)
+            }, status=status.HTTP_201_CREATED)
 
 
 class MyBookingsAPIView(generics.ListAPIView):

@@ -72,7 +72,7 @@ class BookingDetailSerializer(serializers.ModelSerializer):
         model = Booking
         fields = [
             'booking_code', 'hotel_name', 'hotel_id', 'check_in', 'check_out', 'total_price',
-            'status', 'created_at', 'updated_at', 'total_guests',
+            'paid_amount', 'status', 'created_at', 'updated_at', 'total_guests',
             'booking_rooms', 'guests',
         ]
         read_only_fields = fields
@@ -97,6 +97,7 @@ class OfflineBankSerializer(serializers.ModelSerializer):
 class PaymentConfirmationSerializer(serializers.ModelSerializer):
     """
     Serializer for submitting offline payment details for different object types (e.g., Booking, WalletTransaction).
+    Supports multiple payment submissions for a single booking (Reconciliation Logic).
     """
     # Write-only fields for identifying the related object generically.
     content_type = serializers.ChoiceField(
@@ -116,38 +117,57 @@ class PaymentConfirmationSerializer(serializers.ModelSerializer):
     def validate(self, data):
         content_type_str = data.pop('content_type')
         object_id_str = data.pop('object_id')
-        content_object = None
+        payment_amount = data.get('payment_amount')
+        tracking_code = data.get('tracking_code')
 
+        # 1. اعتبارسنجی مبلغ (باید مثبت باشد)
+        if payment_amount is not None and payment_amount <= 0:
+            raise serializers.ValidationError("مبلغ واریزی باید بزرگتر از صفر باشد.")
+
+        # 2. اعتبارسنجی یکتایی کد رهگیری (جلوگیری از ثبت تکراری یک فیش خاص)
+        # نکته: ما اجازه می‌دهیم چند فیش مختلف برای یک رزرو ثبت شود، اما یک فیش نباید دو بار ثبت شود.
+        if PaymentConfirmation.objects.filter(tracking_code=tracking_code).exists():
+            raise serializers.ValidationError("این شماره پیگیری قبلاً در سیستم ثبت شده است.")
+
+        # 3. یافتن موجودیت مربوطه (رزرو یا کیف پول)
         if content_type_str == 'booking':
             try:
-                content_object = Booking.objects.get(booking_code=object_id_str, status='pending')
+                booking = Booking.objects.get(booking_code=object_id_str)
+                
+                # اجازه ثبت فیش در وضعیت‌های 'pending' (اولین پرداخت) و 'awaiting_confirmation' (پرداخت‌های تکمیلی)
+                if booking.status not in ['pending', 'awaiting_confirmation']:
+                    raise serializers.ValidationError("این رزرو در وضعیتی نیست که بتوان برای آن فیش ثبت کرد (تکمیل شده یا لغو شده).")
+                
+                # اگر رزرو قبلاً کامل پرداخت شده، نیازی به فیش جدید نیست (اختیاری)
+                # if booking.get_remaining_payment() <= 0:
+                #    raise serializers.ValidationError("هزینه این رزرو کاملاً پرداخت شده است.")
+
                 data['content_type'] = ContentType.objects.get_for_model(Booking)
-                data['object_id'] = content_object.pk
+                data['object_id'] = booking.pk
+            
             except Booking.DoesNotExist:
-                raise serializers.ValidationError("رزرو با این کد یافت نشد یا در وضعیت در انتظار پرداخت نیست.")
+                raise serializers.ValidationError("رزرو با این کد یافت نشد.")
         
         elif content_type_str == 'wallet_transaction':
             try:
-                # Assuming UUID for transaction_id
-                content_object = WalletTransaction.objects.get(transaction_id=object_id_str, status='pending')
+                # برای شارژ کیف پول معمولا یک تراکنش یک فیش دارد، اما منطق مشابه را حفظ می‌کنیم
+                transaction = WalletTransaction.objects.get(transaction_id=object_id_str, status='pending')
                 data['content_type'] = ContentType.objects.get_for_model(WalletTransaction)
-                data['object_id'] = content_object.pk
+                data['object_id'] = transaction.pk
             except (WalletTransaction.DoesNotExist, ValueError):
                 raise serializers.ValidationError("تراکنش شارژ کیف پول با این شناسه یافت نشد یا در وضعیت در انتظار نیست.")
         
         else:
             raise serializers.ValidationError("نوع موجودیت نامعتبر است.")
 
-        # Check if a confirmation already exists for this object
-        if PaymentConfirmation.objects.filter(content_type=data['content_type'], object_id=data['object_id']).exists():
-            raise serializers.ValidationError("اطلاعات پرداخت برای این مورد قبلاً ثبت شده است.")
-            
+        # نکته مهم: چک کردن PaymentConfirmation.objects.filter(...).exists() که قبلاً بود را حذف کردیم
+        # تا کاربر بتواند چندین فیش برای یک رزرو ثبت کند.
+
         return data
 
     def create(self, validated_data):
-        # The 'content_type' and 'object_id' are already correctly set in validate()
+        # فیلدهای content_type و object_id در متد validate ست شده‌اند
         return PaymentConfirmation.objects.create(**validated_data)
-
 
 class CreateBookingAPISerializer(serializers.Serializer):
     """
