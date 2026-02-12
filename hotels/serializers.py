@@ -266,29 +266,32 @@ class HotelSerializer(serializers.ModelSerializer):
         return calculate_hotel_min_price(obj, self.context)
 
     def get_available_rooms(self, obj):
-        if not self.context.get('check_in') or not self.context.get('duration'): return []
+        # تغییر منطق: اگر تاریخ نبود، همه اتاق‌ها را بده. اگر بود، فیلتر کن.
+        check_in = self.context.get('check_in')
+        duration = self.context.get('duration')
         
-        # دریافت داده‌های اتاق‌ها (شامل فیلد priority که در RoomTypeSerializer اضافه کردیم)
-        all_rooms_data = RoomTypeSerializer(obj.room_types.all(), many=True, context=self.context).data
-        
-        # فیلتر کردن اتاق‌های در دسترس
-        available_rooms = [room for room in all_rooms_data if room.get('is_available')]
-        
+        all_rooms_serializer = RoomTypeSerializer(obj.room_types.all(), many=True, context=self.context)
+        all_rooms_data = all_rooms_serializer.data
+
+        if check_in and duration:
+            # حالت اول: تاریخ انتخاب شده -> فیلتر کردن اتاق‌های پر شده
+            available_rooms = [room for room in all_rooms_data if room.get('is_available')]
+        else:
+            # حالت دوم: تاریخ انتخاب نشده -> نمایش همه اتاق‌ها (برای ویترین)
+            available_rooms = all_rooms_data
+
         def sort_key(room):
-            # 1. تعریف متغیر priority (این خط احتمالا جا افتاده بود)
-            # اگر priority تعریف نشده باشد، مقدار پیش‌فرض 0 در نظر گرفته می‌شود
+            # 1. اولویت (Priority)
             priority = room.get('priority', 0)
             
-            # 2. محاسبه ارزان‌ترین قیمت برای مرتب‌سازی دوم
+            # 2. قیمت
+            # نکته: اگر تاریخ نباشد، priced_board_types خالی است و قیمت inf می‌شود که برای مرتب‌سازی اوکی است
             prices = [item['total_price'] for item in room.get('priced_board_types', [])]
             min_price = min(prices) if prices else float('inf')
             
-            # بازگشت تاپل برای مرتب‌سازی: اول اولویت، بعد قیمت
             return (priority, min_price)
             
-        # اعمال مرتب‌سازی
         available_rooms.sort(key=sort_key)
-        
         return available_rooms
 
 class SuggestedHotelSerializer(serializers.ModelSerializer):

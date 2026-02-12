@@ -26,6 +26,7 @@ class Booking(models.Model):
     STATUS_CHOICES = (
         ('pending', 'در انتظار پرداخت'),
         ('awaiting_confirmation', 'منتظر تایید'),
+        ('awaiting_completion', 'در انتظار تکمیل وجه'),
         ('confirmed', 'تایید شده'),
         ('cancelled', 'لغو شده'),
         ('cancellation_requested', 'درخواست لغو شده'),

@@ -180,8 +180,56 @@ CELERY_RESULT_SERIALIZER = 'json'
 STATICFILES_DIRS = [BASE_DIR / 'static']
 
 # JAZZMIN SETTINGS
+
+# hotel_reservation/reservation_system/settings.py
+
 JAZZMIN_SETTINGS = {
-    # ... other settings
-    "custom_css": "admin/css/jazzmin_rtl.css",
+    "site_title": "سامانه مدیریت هتل",
+    "site_header": "پنل مدیریت",
+    "site_brand": "سامانه رزرواسیون",
+    "welcome_sign": "به پنل مدیریت خوش آمدید",
+    "copyright": "Hotel Reservation System Ltd",
+    "search_model": ["reservations.Booking", "hotels.Hotel"], # جستجوی سریع در بالا
+
+    # منوی سمت راست (سایدبار) را مرتب می‌کنیم
+    "topmenu_links": [
+        {"name": "خانه",  "url": "admin:index", "permissions": ["auth.view_user"]},
+        {"name": "مشاهده سایت", "url": "/", "new_window": True},
+    ],
+    
+    # گروه‌بندی اپلیکیشن‌ها برای نظم بیشتر
+    "order_with_respect_to": [
+        "reservations", 
+        "hotels", 
+        "pricing", 
+        "agencies", 
+        "core"
+    ],
+
+    # آیکون‌های مرتبط (FontAwesome)
+    "icons": {
+        "auth": "fas fa-users-cog",
+        "auth.user": "fas fa-user",
+        "auth.Group": "fas fa-users",
+        "reservations.Booking": "fas fa-concierge-bell", # آیکون زنگ هتل
+        "reservations.PaymentConfirmation": "fas fa-file-invoice-dollar",
+        "hotels.Hotel": "fas fa-hotel",
+        "hotels.RoomType": "fas fa-bed",
+        "pricing.Price": "fas fa-tags",
+        "pricing.Availability": "fas fa-calendar-alt",
+    },
+    
+    # ظاهر کلی
+    "default_icon_parents": "fas fa-chevron-circle-right",
+    "default_icon_children": "fas fa-circle",
+    "related_modal_active": True,
+    "custom_css":"admin/css/jazzmin_rtl.css",
+    "show_ui_builder": False,
 }
+
+JAZZMIN_UI_TWEAKS = {
+    "theme": "flatly", # تم مدرن و فلت
+    # "theme": "darkly", # یا تم تاریک
+}
+
 

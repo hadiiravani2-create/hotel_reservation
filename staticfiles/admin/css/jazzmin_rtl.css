@@ -1,49 +1,85 @@
+/* --- Global Direction --- */
 body {
     direction: rtl;
     text-align: right;
 }
 
-/* Sidebar */
+/* --- Main Layout & Sidebar --- */
 .main-sidebar {
     right: 0;
     left: auto;
 }
 
-.content-wrapper, .main-footer, .main-header {
+/* تنظیم فاصله محتوا برای حالت منوی باز (استاندارد) */
+.content-wrapper, 
+.main-footer, 
+.main-header {
     margin-right: 250px;
     margin-left: 0;
+    transition: margin-right .3s ease-in-out; /* انیمیشن نرم برای باز و بسته شدن */
 }
 
+/* [NEW] اصلاح حالت منوی بسته (Collapsed Sidebar) */
+/* وقتی کلاس sidebar-collapse به بادی اضافه می‌شود، فاصله باید کم شود */
+body.sidebar-collapse .content-wrapper,
+body.sidebar-collapse .main-footer,
+body.sidebar-collapse .main-header {
+    margin-right: 4.6rem !important; /* عرض منوی بسته شده */
+    margin-left: 0 !important;
+}
+
+/* [NEW] اصلاح حالت موبایل (باز شدن منو روی صفحه) */
+body.sidebar-open .content-wrapper,
+body.sidebar-open .main-footer {
+    transform: translate(0, 0); /* جلوگیری از جابجایی اشتباه در برخی نسخه‌ها */
+}
+
+/* --- Navigation Items --- */
 .nav-sidebar .nav-link p {
     display: inline;
 }
 
 .nav-sidebar .nav-link i.right {
-    right: auto;
-    left: 1rem;
+    right: auto; /* حذف راست‌چین پیش‌فرض آیکون فلش */
+    left: 1rem;  /* انتقال به چپ */
+    transform: rotate(180deg); /* چرخش فلش برای حالت بسته */
+}
+/* چرخش مجدد فلش وقتی منو باز می‌شود */
+.nav-sidebar .nav-link.menu-open i.right {
+    transform: rotate(90deg);
 }
 
-/* Header and User menu */
+/* --- Header & Navbar --- */
 .navbar-nav {
     padding-right: 0;
 }
 
 .navbar-expand .navbar-nav:first-child {
     margin-right: 0 !important;
-    margin-left: auto !important;
+    margin-left: auto !important; /* هل دادن منوی راست به سمت راست */
 }
 
-/* Breadcrumbs */
+/* آیکون‌های نوار بالا */
+.navbar-nav > .user-menu > .dropdown-menu {
+    right: auto;
+    left: 0;
+}
+
+/* --- Breadcrumbs & Titles --- */
 .breadcrumb {
     padding: .75rem 1rem;
-    float: right;
+    float: left; /* اصلاح: بردکرامب معمولا سمت چپ هدر قرار می‌گیرد */
+    direction: ltr; /* مسیرها معمولا بهتر است چپ به راست باشند (اختیاری) */
 }
+/* اگر می‌خواهید بردکرامب راست باشد:
+.breadcrumb { float: right; direction: rtl; }
+*/
 
 .content-header h1 {
     float: right;
 }
 
-/* Form fields and labels */
+/* --- Forms & Inputs --- */
 label:not(.form-check-label):not(.custom-file-label) {
     text-align: right;
 }
@@ -52,23 +88,59 @@ label:not(.form-check-label):not(.custom-file-label) {
     text-align: right;
 }
 
+/* دکمه‌های ذخیره معمولا باید سمت چپ باشند (پایان فرم) */
 .form-actions {
-    text-align: left;
+    text-align: left; 
 }
 
 .card-header > .card-tools {
-    float: left;
+    float: left; /* ابزارهای کارت سمت چپ */
     margin-right: 0;
 }
 
-/* Tables */
+/* ورودی‌های خاص که باید چپ‌چین باشند (مثل ایمیل یا تاریخ) */
+input[type="email"], 
+input[type="url"], 
+input[type="password"], 
+.vDateField, 
+.vTimeField {
+    direction: ltr;
+    text-align: left;
+}
+
+/* --- Tables --- */
 th {
     text-align: right;
 }
+.table td, .table th {
+    text-align: right;
+}
 
-/* Fixes for smaller screens */
+/* [NEW] Select2 Fixes (برای فیلدهای جستجو و اتوکمپلیت) */
+.select2-container--default .select2-selection--single .select2-selection__rendered {
+    padding-right: 8px;
+    padding-left: 20px;
+    text-align: right;
+}
+.select2-container--default .select2-results__option {
+    text-align: right;
+    direction: rtl;
+}
+.select2-search__field {
+    direction: rtl;
+    text-align: right;
+}
+
+/* --- Responsive Fixes (Mobile) --- */
 @media (max-width: 767.98px) {
+    .content-wrapper, 
+    .main-footer, 
     .main-header {
-        margin-right: 0;
+        margin-right: 0 !important; /* حذف فاصله در موبایل */
+        margin-left: 0 !important;
+    }
+    
+    .main-sidebar {
+        box-shadow: 0 14px 28px rgba(0,0,0,0.25), 0 10px 10px rgba(0,0,0,0.22); /* سایه برای وقتی منو روی صفحه میاد */
     }
 }
