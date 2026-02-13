@@ -72,6 +72,10 @@ class BookingDetailSerializer(serializers.ModelSerializer):
         model = Booking
         fields = [
             'booking_code', 'hotel_name', 'hotel_id', 'check_in', 'check_out', 'total_price',
+            'total_price',       # قیمت نهایی قابل پرداخت
+            'total_room_price',  # قیمت خالص اتاق‌ها
+            'total_vat',         # مبلغ مالیات
+            'total_service_price',
             'paid_amount', 'status', 'created_at', 'updated_at', 'total_guests',
             'booking_rooms', 'guests',
         ]

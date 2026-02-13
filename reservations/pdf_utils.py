@@ -1,4 +1,4 @@
-# reservations/pdf_utils.py
+# FILE: back/reservations/pdf_utils.py
 # version: 1.0.1
 # FIX: Smartly determine base_url for fonts based on DEBUG setting.
 
@@ -6,13 +6,16 @@ from io import BytesIO
 from django.template.loader import render_to_string
 from django.conf import settings
 from weasyprint import HTML
-from pathlib import Path # Import Path
+from pathlib import Path
 from django.utils.translation import gettext_lazy as _
 
 # Import مدل‌های مورد نیاز
-from .models import Booking
+# Note: Using string reference or importing inside function avoids circular imports if needed, 
+# but here direct import is fine if models don't import utils.
+if False: # Type hinting only
+    from .models import Booking
 
-def generate_booking_confirmation_pdf(booking: Booking) -> bytes:
+def generate_booking_confirmation_pdf(booking) -> bytes:
     """
     Generates a PDF confirmation for a given booking object
     using WeasyPrint.
@@ -31,7 +34,7 @@ def generate_booking_confirmation_pdf(booking: Booking) -> bytes:
     
     if settings.DEBUG:
         # In DEBUG mode, fonts are in STATICFILES_DIRS
-        # We take the first directory from the list (assuming it's defined)
+        # We take the first directory from the list (assuming it's defined and contains fonts)
         if not settings.STATICFILES_DIRS:
              raise Exception(_("STATICFILES_DIRS must be set in DEBUG mode for PDF generation."))
         

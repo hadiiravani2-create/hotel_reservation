@@ -21,6 +21,7 @@ class HotelServiceSerializer(serializers.ModelSerializer):
             'pricing_model',
             'price',
             'service_type',
+            'is_taxable'
         ]
 
 # --- ADDITION: The missing serializer ---

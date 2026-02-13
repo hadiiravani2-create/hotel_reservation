@@ -192,19 +192,42 @@ class PriceQuoteMultiRoomAPIView(APIView):
         serializer = PriceQuoteMultiRoomInputSerializer(data=request.data)
         if serializer.is_valid():
             data = serializer.validated_data
-            check_in_greg = data['check_in_date'] 
-            check_in_jalali = jdate.fromgregorian(date=check_in_greg)
-            check_out_jalali = check_in_jalali + timedelta(days=data['duration'])
             
-            result = calculate_multi_booking_price(
-                booking_rooms=data['rooms'],
-                check_in_date=check_in_jalali,
-                check_out_date=check_out_jalali,
-                user=request.user
-            )
-            if result:
-                return Response(result)
-            return Response({"error": "Calculation failed or unavailable"}, status=400)
+            # 1. Get string dates from serializer (keys match serializers.py now)
+            check_in_str = data['check_in']
+            check_out_str = data['check_out']
+            
+            try:
+                # 2. Parse Check-in String -> Jalali Date Object
+                # Assuming format is YYYY-MM-DD
+                check_in_str = to_english_digits(check_in_str)
+                y, m, d = map(int, check_in_str.split('-'))
+                check_in_jalali = jdatetime.date(year=y, month=m, day=d)
+                
+                # 3. Calculate Check-out based on duration (Wait, serializer has check_out string, not duration)
+                # Note: The input serializer has 'check_out', but the logic below seems to infer duration.
+                # Let's rely on the explicit check_out string provided by frontend.
+                check_out_str = to_english_digits(check_out_str)
+                oy, om, od = map(int, check_out_str.split('-'))
+                check_out_jalali = jdatetime.date(year=oy, month=om, day=od)
+
+                # 4. Call Selector
+                result = calculate_multi_booking_price(
+                    booking_rooms=data['booking_rooms'], # Key is 'booking_rooms', not 'rooms'
+                    check_in_date=check_in_jalali,
+                    check_out_date=check_out_jalali,
+                    user=request.user
+                )
+                
+                if result:
+                    return Response(result)
+                return Response({"error": "Calculation failed or unavailable"}, status=400)
+                
+            except ValueError:
+                 return Response({"error": "Invalid date format. Use YYYY-MM-DD (Jalali)."}, status=400)
+            except Exception as e:
+                 return Response({"error": str(e)}, status=500)
+
         return Response(serializer.errors, status=400)
 
 

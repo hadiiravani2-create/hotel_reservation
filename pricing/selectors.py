@@ -203,7 +203,8 @@ def find_available_hotels(city_id: int, check_in_date, check_out_date, user, **f
 
 def calculate_multi_booking_price(booking_rooms, check_in_date, check_out_date, user):
     """
-    Calculates the final price for a list of multiple room bookings across the entire stay duration.
+    Calculates the final price including VAT based on hotel settings.
+    Returns broken down costs: room_price, vat, and total_price.
     """
     room_types_map = {rt.id: rt for rt in RoomType.objects.filter(id__in=[r['room_type_id'] for r in booking_rooms])}
     board_types_map = {bt.id: bt for bt in BoardType.objects.filter(id__in=[r['board_type_id'] for r in booking_rooms])}
@@ -211,8 +212,10 @@ def calculate_multi_booking_price(booking_rooms, check_in_date, check_out_date, 
     duration = (check_out_date - check_in_date).days
     if duration <= 0: return None
 
-    total_booking_price = Decimal(0)
-    
+    total_room_price = Decimal(0)
+    hotel = None # To store the hotel object for tax calculation
+    room_specific_prices = []
+
     for room_data in booking_rooms:
         room_type_id = room_data['room_type_id']
         board_type_id = room_data['board_type_id']
@@ -226,6 +229,9 @@ def calculate_multi_booking_price(booking_rooms, check_in_date, check_out_date, 
 
         if not room_type or not board_type:
             return None 
+
+        # Capture hotel from the first valid room type
+        if hotel is None: hotel = room_type.hotel
 
         room_selection_price = Decimal(0)
         
@@ -242,8 +248,30 @@ def calculate_multi_booking_price(booking_rooms, check_in_date, check_out_date, 
             
             room_selection_price += daily_base_price_total + daily_extra_adults_cost + daily_children_cost
 
-        total_booking_price += room_selection_price
+        total_room_price += room_selection_price
+
+        room_specific_prices.append({
+            'room_type_id': room_type_id,
+            'board_type_id': board_type_id,
+            'total_price': room_selection_price
+        })
+
+    # --- TAX CALCULATION LOGIC ---
+    total_vat = Decimal(0)
+    tax_percentage = 0
+    
+    if hotel and hasattr(hotel, 'tax_percentage') and hotel.tax_percentage > 0:
+        tax_percentage = hotel.tax_percentage
+        tax_rate = Decimal(tax_percentage) / Decimal(100)
+        total_vat = total_room_price * tax_rate
+    
+    final_total_price = total_room_price + total_vat
 
     return {
-        "total_price": total_booking_price
+        "total_room_price": total_room_price, # Pure room cost
+        "total_vat": total_vat,               # Calculated Tax
+        "total_price": final_total_price,     # Payable amount
+        "tax_percentage": tax_percentage,      # Rate used
+        "room_specific_prices": room_specific_prices
     }
+

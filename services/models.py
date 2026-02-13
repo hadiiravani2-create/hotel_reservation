@@ -24,6 +24,7 @@ class HotelService(models.Model):
     description = models.TextField(blank=True, verbose_name="توضیحات")
     pricing_model = models.CharField(max_length=10, choices=PricingModel.choices, verbose_name="مدل قیمت‌گذاری")
     price = models.DecimalField(max_digits=10, decimal_places=0, default=0, verbose_name="قیمت")
+    is_taxable = models.BooleanField(default=True, verbose_name="مشمول مالیات است؟")
 
     def __str__(self):
         return f"{self.name} ({self.hotel.name})"

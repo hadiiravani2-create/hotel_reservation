@@ -178,6 +178,62 @@ class CreateBookingAPIView(APIView):
 
         validated_data = serializer.validated_data
         
+        # --- Aggregation Logic for Duplicate Rooms ---
+        # هدف: تجمیع اتاق‌هایی که نوع و برد یکسان دارند در یک ردیف
+        aggregated_rooms_map = {}
+        
+        for r in validated_data['booking_rooms']:
+            key = (r['room_type_id'], r['board_type_id'])
+            
+            # دریافت مقادیر عددی با پیش‌فرض صفر
+            qty = r.get('quantity', 0)
+            adults = r.get('adults') or r.get('extra_adults') or 0
+            children = r.get('children') or r.get('children_count') or 0
+            
+            if key in aggregated_rooms_map:
+                # اگر این نوع اتاق قبلا بود، فقط تعداد را اضافه کن
+                aggregated_rooms_map[key]['quantity'] += qty
+                
+                # نکته مهم: adults و children "به ازای هر اتاق" هستند.
+                # فرض می‌کنیم در یک نوع اتاق یکسان، تعداد نفرات یکسان است.
+                # برای اطمینان، می‌توانیم ماکزیمم را بگیریم تا کم‌فروشی نشود.
+                aggregated_rooms_map[key]['adults'] = max(aggregated_rooms_map[key]['adults'], adults)
+                aggregated_rooms_map[key]['children'] = max(aggregated_rooms_map[key]['children'], children)
+                
+                # تجمیع درخواست‌های اضافی
+                if r.get('extra_requests'):
+                    existing_req = aggregated_rooms_map[key].get('extra_requests', '')
+                    new_req = r.get('extra_requests', '')
+                    if existing_req:
+                        aggregated_rooms_map[key]['extra_requests'] = f"{existing_req} | {new_req}"
+                    else:
+                        aggregated_rooms_map[key]['extra_requests'] = new_req
+            else:
+                # ایجاد ردیف جدید
+                aggregated_rooms_map[key] = {
+                    'room_type_id': r['room_type_id'],
+                    'board_type_id': r['board_type_id'],
+                    'quantity': qty,
+                    'adults': adults,
+                    'children': children,
+                    'extra_requests': r.get('extra_requests')
+                }
+
+        # تبدیل دیکشنری به لیست برای ادامه پردازش
+        # نام فیلدها را با فرمت مورد نیاز ادامه کد (selectors و models) هماهنگ می‌کنیم
+        processed_booking_rooms = []
+        for item in aggregated_rooms_map.values():
+            processed_booking_rooms.append({
+                'room_type_id': item['room_type_id'],
+                'board_type_id': item['board_type_id'],
+                'quantity': item['quantity'],
+                'extra_adults': item['adults'],     # مپینگ برای سلکتور قیمت
+                'adults': item['adults'],           # مپینگ برای مدل
+                'children_count': item['children'], # مپینگ برای سلکتور قیمت
+                'children': item['children'],       # مپینگ برای مدل
+                'extra_requests': item['extra_requests']
+            })
+
         # Determine the booking user. Use request.user if authenticated, otherwise None (Guest Booking).
         user = request.user if request.user.is_authenticated else None
         agency = None
@@ -241,7 +297,7 @@ class CreateBookingAPIView(APIView):
 
         try:
             availability_requirements = defaultdict(int)
-            for room_data in validated_data['booking_rooms']:
+            for room_data in processed_booking_rooms:
                 for date in date_range:
                     # Sum up required quantity for each room type on each date
                     availability_requirements[(room_data['room_type_id'], date)] += room_data['quantity']
@@ -263,7 +319,7 @@ class CreateBookingAPIView(APIView):
 
             # Calculate total price for all rooms
             price_data = calculate_multi_booking_price(
-                validated_data['booking_rooms'], 
+                processed_booking_rooms,
                 check_in, 
                 check_out, 
                 user # Pass the determined user (authenticated or None/guest_user) for pricing calculation
@@ -272,6 +328,8 @@ class CreateBookingAPIView(APIView):
             if price_data is None:
                 raise ValidationError("Error calculating final price.")
 
+            total_room_price = price_data['total_room_price']
+            total_vat = price_data['total_vat']
             total_price = price_data['total_price']
 
 
@@ -290,62 +348,44 @@ class CreateBookingAPIView(APIView):
                 check_out=check_out,
                 status=initial_status, # <-- The new dynamic status is used here
                 total_price=total_price,
-                total_room_price=total_price,
+                total_room_price=total_room_price,
+                total_vat=total_vat,
                 total_service_price=Decimal(0),
-                total_vat=Decimal(0), # Assuming VAT is included in total_price for now
                 paid_amount=Decimal(0)
             )
             
             # Create BookingRooms and update availability
-            first_room_data = validated_data['booking_rooms'][0]
-            for room_data in validated_data['booking_rooms']:
-                try:
-                    room_type = RoomType.objects.get(pk=room_data['room_type_id'])
-                except RoomType.DoesNotExist:
-                    raise ValidationError(f"اتاقی با شناسه {room_data['room_type_id']} یافت نشد.")
+            for room_data in processed_booking_rooms:
                 room_type_id = room_data['room_type_id']
                 board_type_id = room_data['board_type_id']
 
-                # Find the price details calculated by the selector
                 room_price_details = next(
                     (p for p in price_data.get('room_specific_prices', [])
                      if p.get('room_type_id') == room_type_id and p.get('board_type_id') == board_type_id),
                     None
                 )
                 room_total_price = room_price_details['total_price'] if room_price_details else Decimal(0)
-
-                # --- START: Modified logic to read new field names ---
-                extra_adults_for_model = room_data.get('extra_adults', 0)
-                children_for_model = room_data.get('children_count', 0)
-                room_total_price = Decimal(0)
-                if room_data == first_room_data:
-                    room_total_price = booking.total_room_price
                 
                 BookingRoom.objects.create(
                     booking=booking, 
-                    room_type_id=room_data['room_type_id'],
-                    board_type_id=room_data['board_type_id'],
+                    room_type_id=room_type_id,
+                    board_type_id=board_type_id,
                     quantity=room_data['quantity'],
-                    adults=extra_adults_for_model, # Use new field
-                    children=children_for_model, # Use new field
+                    adults=room_data['adults'], 
+                    children=room_data['children'],
                     extra_requests=room_data.get('extra_requests'), 
                     total_price=room_total_price
                 )
-                # --- END: Modified logic ---
 
-                current_room_type_id = room_data['room_type_id']
                 for date in date_range:
-                    availability_obj = availability_map[(current_room_type_id, date)]
+                    availability_obj = availability_map[(room_type_id, date)]
                     availability_obj.quantity -= room_data['quantity']
                     availability_obj.save()
 
-            # Create Guests
             for guest_data in validated_data['guests']:
-                # The 'wants_to_register' field should be popped if it exists, as it's not a model field
                 guest_data.pop('wants_to_register', None)
                 Guest.objects.create(booking=booking, **guest_data)
                 
-            # --- START: New logic to save selected services ---
             if SERVICES_APP_ENABLED and 'selected_services' in validated_data:
                 for service_data in validated_data['selected_services']:
                     try:
@@ -353,41 +393,40 @@ class CreateBookingAPIView(APIView):
                         quantity = service_data.get('quantity', 1)
                         service = HotelService.objects.get(id=service_id, hotel=hotel)
                         
-                        # Calculate price based on service model
                         price = 0
                         if service.pricing_model == 'PERSON':
                             price = service.price * quantity
                         elif service.pricing_model == 'BOOKING':
                             price = service.price
-                            quantity = 1 # Enforce quantity 1 for per-booking
-                        # FREE services have price 0
+                            quantity = 1
+
+                        service_tax = Decimal(0)
+                        if hasattr(service, 'is_taxable') and service.is_taxable and hasattr(hotel, 'tax_percentage') and hotel.tax_percentage > 0:
+                             tax_rate = Decimal(hotel.tax_percentage) / Decimal(100)
+                             service_tax = price * tax_rate
+
+                        line_total = price + service_tax
 
                         BookedService.objects.create(
                             booking=booking,
                             hotel_service=service,
                             quantity=quantity,
-                            total_price=price,
+                            total_price=line_total,
                             details=service_data.get('details', {})
                         )
                         
-                        # Add service price to booking total price
-                        booking.total_price += price
                         booking.total_service_price += price
+                        booking.total_vat += service_tax
+                        booking.total_price += line_total
 
                     except HotelService.DoesNotExist:
-                        pass # Skip invalid services
+                        pass 
             
-            # Save the booking again to update total_price with services
-            booking.save(update_fields=['total_price', 'total_service_price'])
-            # --- END: New logic to save selected services ---
-                
-            # TODO: Handle optional registration if requested by the principal guest (Future Feature)
+            booking.save(update_fields=['total_price', 'total_service_price', 'total_vat'])
 
         except ValidationError as e:
-            # Delete the booking object if it was created before the exception
             if 'booking' in locals():
                 booking.delete()
-            # Clean up Django's built-in ValidationError messages for API response
             error_message = str(e) if isinstance(e, ValidationError) else "خطای ناشناخته در فرآیند رزرو."
             return Response({"error": error_message}, status=status.HTTP_400_BAD_REQUEST)
             
@@ -396,8 +435,6 @@ class CreateBookingAPIView(APIView):
                 "success": True, 
                 "booking_code": booking.booking_code, 
                 "total_price": booking.total_price,
-                # Logic: If hotel is online -> 'online' (User goes to payment page)
-                #        If hotel is offline -> 'offline' (User goes to success/tracking page)
                 "payment_type": 'online' if hotel.is_online else 'offline'
             },
             status=status.HTTP_201_CREATED
