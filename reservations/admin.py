@@ -1,88 +1,130 @@
-# FILE: hotel_reservation/reservations/admin.py
-# version: 1.1.2
-# FIX: Resolved FieldError by replacing 'duration' with 'duration_display' method in fieldsets and readonly_fields.
+# FILE: back/reservations/admin.py
+# version: 5.0.0
+# STRATEGY: Back to Standard. Strict ReadOnly for Rooms/Financials.
+# UI: CSS handles hiding buttons. Python handles Data Safety.
 
 from django.contrib import admin
 from django.utils.html import format_html
-from django.db.models import Sum
 from django.urls import path, reverse
-from django.shortcuts import redirect
+from django.shortcuts import redirect, get_object_or_404
 from django.contrib import messages
+from django.http import HttpResponse
 from django.contrib.contenttypes.admin import GenericTabularInline
+import traceback
 
 from .models import Booking, Guest, BookingRoom, OfflineBank, PaymentConfirmation 
 from .forms import BookingForm
-from agencies.models import AgencyTransaction
-from pricing.selectors import calculate_multi_booking_price
-from hotels.models import RoomType, BoardType
+from .pdf_utils import generate_booking_confirmation_pdf 
 
-# --- Inlines ---
+# ==========================================
+# 1. INLINES
+# ==========================================
 
 class GuestInline(admin.TabularInline):
+    """
+    لیست مهمان‌ها: تنها جایی که ورودی (Input) دارد.
+    """
     model = Guest
-    extra = 1
-    classes = ('dynamic-guests',)
-    fields = ('first_name', 'last_name', 'national_id', 'phone_number', 'is_foreign')
+    extra = 0
+    fields = ('first_name', 'last_name', 'national_id', 'phone_number')
+    verbose_name = "میهمان"
+    verbose_name_plural = "لیست میهمانان (جهت ویرایش)"
+    can_delete = True
 
 class BookingRoomInline(admin.TabularInline):
+    """
+    لیست اتاق‌ها: تبدیل شده به متن ساده (Read Only).
+    این کار باعث می‌شود تمام دراپ‌داون‌ها و آیکون‌ها حذف شوند.
+    """
     model = BookingRoom
-    extra = 1
-    # price_per_night removed to avoid errors as it is calculated on the fly usually
-    fields = ('room_type', 'board_type', 'quantity', 'adults', 'children')
+    extra = 0
+    # نکته: نام فیلدها باید دقیقاً با متدهای تعریف شده پایین یکی باشد
+    fields = ('room_type_text', 'board_type_text', 'quantity', 'total_price_text')
+    # این خط جادویی است که اینپوت‌ها را به متن تبدیل می‌کند:
+    readonly_fields = ('room_type_text', 'board_type_text', 'quantity', 'total_price_text')
     
+    can_delete = False
+    max_num = 0 
+    verbose_name = "اتاق"
+    verbose_name_plural = "اتاق‌های رزرو شده"
+
+    def room_type_text(self, obj):
+        return obj.room_type.name
+    room_type_text.short_description = "نوع اتاق"
+
+    def board_type_text(self, obj):
+        return obj.board_type.name
+    board_type_text.short_description = "سرویس"
+
+    def total_price_text(self, obj):
+        return f"{obj.total_price:,}"
+    total_price_text.short_description = "قیمت کل"
+
 class PaymentConfirmationInline(GenericTabularInline):
-    """
-    Inline admin to show payment confirmations directly inside the Booking page.
-    """
     model = PaymentConfirmation
     extra = 0
-    fields = ('tracking_code', 'offline_bank', 'payment_amount', 'payment_date', 'is_verified', 'status_badge')
-    readonly_fields = ('submission_date', 'status_badge')
-    verbose_name = "تراکنش مالی"
-    verbose_name_plural = "لیست واریزی‌ها (تطبیق مالی)"
-    can_delete = True
+    verbose_name = "تراکنش"
+    verbose_name_plural = "واریزی‌ها"
+    fields = ('offline_bank', 'tracking_code', 'payment_amount', 'payment_date', 'status_badge', 'action_btn')
+    readonly_fields = ('offline_bank', 'tracking_code', 'payment_amount', 'payment_date', 'status_badge', 'action_btn')
+    can_delete = False
 
     def status_badge(self, obj):
         if obj.is_verified:
-            return format_html('<span style="color:white; background:green; padding:3px 8px; border-radius:5px;">تایید شده</span>')
-        return format_html('<span style="color:white; background:orange; padding:3px 8px; border-radius:5px;">در انتظار بررسی</span>')
+            return format_html('<span style="color:green;">✅ تایید شده</span>')
+        return format_html('<span style="color:orange;">⏳ بررسی نشده</span>')
     status_badge.short_description = "وضعیت"
 
+    def action_btn(self, obj):
+        if obj and obj.id and not obj.is_verified:
+            url = reverse('admin:verify-payment-action', args=[obj.id])
+            return format_html(
+                '<a class="voucher-btn" style="background-color:green; padding:3px 8px; font-size:11px;" href="{}">✓ تایید</a>',
+                url
+            )
+        return "-"
+    action_btn.short_description = "عملیات"
 
-# --- Admins ---
+
+# ==========================================
+# 2. MAIN ADMIN
+# ==========================================
 
 @admin.register(Booking)
 class BookingAdmin(admin.ModelAdmin):
     form = BookingForm
-    list_display = (
+    list_display = ('booking_code', 'user_display', 'check_in_jalali', 'status_badge', 'total_price_display')
+    list_filter = ('status', 'check_in')
+    search_fields = ('booking_code', 'user__username', 'guests__last_name')
+    
+    inlines = [PaymentConfirmationInline, BookingRoomInline, GuestInline]
+
+    # لیست فیلدهایی که نباید قابل ویرایش باشند
+    readonly_fields = (
+        'voucher_download_link', # دکمه دانلود ووچر
         'booking_code', 
-        'user_link', 
-        'hotel_name_display',
-        'check_in_jalali', 
-        'total_price_display', 
-        'paid_amount_display', 
-        'status', 
+        'user', 'agency',        # کاربر و آژانس فقط خواندنی
+        'total_price', 'paid_amount', 'total_vat', 'total_service_price',
+        'check_in', 'check_out', 'duration_display',
+        'created_at', 'updated_at'
     )
-    list_filter = ('status', 'check_in', 'booking_rooms__room_type__hotel')
-    search_fields = ('booking_code', 'user__username', 'guests__last_name', 'guests__national_id')
-    inlines = [GuestInline, BookingRoomInline, PaymentConfirmationInline]
-    
-    # FIX: Added 'duration_display' to readonly fields so it can be used in fieldsets
-    readonly_fields = ('booking_code', 'total_price', 'created_at', 'updated_at', 'duration_display') 
-    
-    list_editable = ('status',)
-    
+
     fieldsets = (
-        ('اطلاعات اصلی', {
-            'fields': (('booking_code', 'status'), 'user', 'agency')
+        ('عملیات', {
+            'fields': ('voucher_download_link', 'status')
         }),
-        ('اطلاعات زمانی', {
-            # FIX: Changed 'duration' to 'duration_display'
-            'fields': (('check_in', 'check_out'), 'duration_display')
+        ('اطلاعات رزرو (غیرقابل تغییر)', {
+            'fields': (
+                ('booking_code', 'user'),
+                ('check_in', 'check_out', 'duration_display'),
+                ('agency',)
+            )
         }),
-        ('اطلاعات مالی', {
-            'fields': (('total_price', 'paid_amount'),),
-            'description': 'در صورتی که مبلغ پرداخت شده با مبلغ کل برابر باشد، وضعیت رزرو می‌تواند تایید شود.'
+        ('وضعیت مالی', {
+            'fields': (
+                ('total_price', 'paid_amount'),
+                ('total_vat', 'total_service_price')
+            )
         }),
         ('تاریخچه', {
             'classes': ('collapse',),
@@ -91,109 +133,83 @@ class BookingAdmin(admin.ModelAdmin):
     )
 
     class Media:
-        css = { 'all': ('admin/css/admin_fixes.css',) }
-        js = ("admin/js/guest_form.js",) 
+        css = { 'all': ('admin/css/custom_admin.css',) }
 
-    # --- Custom Methods for List/Readonly Display ---
+    # --- Actions ---
+    def get_urls(self):
+        urls = super().get_urls()
+        custom_urls = [
+            path('<int:booking_id>/download-voucher/', self.admin_site.admin_view(self.download_voucher_view), name='booking-download-voucher'),
+            path('verify-payment/<int:payment_id>/', self.admin_site.admin_view(self.process_payment_verification), name='verify-payment-action'),
+        ]
+        return custom_urls + urls
 
-    def duration_display(self, obj):
-        """Calculates duration based on check-in/out for display."""
-        if obj.check_in and obj.check_out:
-            return f"{obj.get_duration_days()} شب"
+    def download_voucher_view(self, request, booking_id):
+        booking = get_object_or_404(Booking, id=booking_id)
+        try:
+            pdf_bytes = generate_booking_confirmation_pdf(booking)
+            response = HttpResponse(pdf_bytes, content_type='application/pdf')
+            response['Content-Disposition'] = f'attachment; filename="Voucher_{booking.booking_code}.pdf"'
+            return response
+        except Exception:
+            traceback.print_exc()
+            self.message_user(request, "خطا در تولید PDF", messages.ERROR)
+            return redirect(request.META.get('HTTP_REFERER', 'admin:index'))
+
+    def process_payment_verification(self, request, payment_id):
+        payment = get_object_or_404(PaymentConfirmation, id=payment_id)
+        if not payment.is_verified:
+            payment.is_verified = True
+            payment.save()
+            booking = payment.content_object
+            if isinstance(booking, Booking):
+                booking.paid_amount += payment.payment_amount
+                if booking.paid_amount >= booking.total_price and booking.status == 'awaiting_confirmation':
+                    booking.status = 'confirmed'
+                booking.save()
+                self.message_user(request, "پرداخت تایید شد.", messages.SUCCESS)
+        return redirect(request.META.get('HTTP_REFERER', 'admin:index'))
+
+    # --- Display Fields ---
+    def voucher_download_link(self, obj):
+        if obj.pk:
+            url = reverse('admin:booking-download-voucher', args=[obj.pk])
+            return format_html(
+                '<a class="voucher-btn" href="{}" target="_blank">📥 دانلود ووچر (PDF)</a>',
+                url
+            )
         return "-"
-    duration_display.short_description = "مدت اقامت"
+    voucher_download_link.short_description = "ووچر"
+    voucher_download_link.allow_tags = True
 
-    def user_link(self, obj):
-        return obj.user.get_full_name() if obj.user else "کاربر مهمان"
-    user_link.short_description = "کاربر"
+    def user_display(self, obj):
+        return obj.user.get_full_name() or obj.user.username if obj.user else "مهمان"
+    user_display.short_description = "کاربر"
 
-    def hotel_name_display(self, obj):
-        first_room = obj.booking_rooms.first()
-        return first_room.room_type.hotel.name if first_room else "-"
-    hotel_name_display.short_description = "هتل"
+    def status_badge(self, obj):
+        colors = {'pending': 'orange', 'confirmed': 'green', 'cancelled': 'red', 'awaiting_confirmation': 'blue'}
+        color = colors.get(obj.status, 'black')
+        # استایل خطی ساده برای سازگاری با همه تم‌ها
+        return format_html(f'<span style="color:{color}; font-weight:bold;">{obj.get_status_display()}</span>')
+    status_badge.short_description = "وضعیت"
+
+    def total_price_display(self, obj):
+        return f"{obj.total_price:,}"
+    total_price_display.short_description = "مبلغ"
 
     def check_in_jalali(self, obj):
         return obj.check_in.strftime("%Y/%m/%d")
-    check_in_jalali.short_description = "تاریخ ورود"
+    check_in_jalali.short_description = "ورود"
 
-    def total_price_display(self, obj):
-        return f"{obj.total_price:,} تومان"
-    total_price_display.short_description = "مبلغ کل"
+    def duration_display(self, obj):
+        return f"{obj.get_duration_days()} شب" if obj.check_in else "-"
+    duration_display.short_description = "مدت"
 
-    def paid_amount_display(self, obj):
-        """Visualizes the financial status (Green if fully paid, Red if debt)."""
-        if obj.paid_amount >= obj.total_price:
-            return format_html('<span style="color: green; font-weight: bold;">تسویه شده</span>')
-        remaining = obj.total_price - obj.paid_amount
-        return format_html(
-            f'<span style="color: red;">{obj.paid_amount:,} (مانده: {remaining:,})</span>'
-        )
-    paid_amount_display.short_description = "پرداختی / مانده"
-
-    # --- Bulk Actions ---
-    actions = ['mark_as_confirmed', 'mark_as_cancelled']
-
-    def mark_as_confirmed(self, request, queryset):
-        rows_updated = queryset.update(status='confirmed')
-        self.message_user(request, f"{rows_updated} رزرو به وضعیت تایید شده تغییر یافتند.")
-    mark_as_confirmed.short_description = "تایید رزروهای انتخاب شده"
-
-    def mark_as_cancelled(self, request, queryset):
-        rows_updated = queryset.update(status='cancelled')
-        self.message_user(request, f"{rows_updated} رزرو لغو شدند.")
-    mark_as_cancelled.short_description = "لغو رزروهای انتخاب شده"
-
-    # --- Overridden Methods ---
-
-    def get_readonly_fields(self, request, obj=None):
-        if not request.user.is_superuser:
-            return ('booking_code', 'user', 'total_price', 'paid_amount', 'created_at', 'updated_at', 'duration_display') 
-        return self.readonly_fields
-
-    def save_model(self, request, obj, form, change):
-        super().save_model(request, obj, form, change)
-
-    def save_formset(self, request, form, formset, change):
-        formset.save()
-
-
+# --- Other Admins ---
 @admin.register(OfflineBank)
 class OfflineBankAdmin(admin.ModelAdmin):
-    list_display = ('bank_name', 'account_holder', 'card_number', 'shaba_number', 'hotel', 'is_active')
-    list_filter = ('is_active', 'hotel')
-    list_editable = ('is_active',)
-    search_fields = ('bank_name', 'account_number', 'card_number', 'shaba_number', 'hotel__name')
-    fields = ('bank_name', 'account_holder', 'account_number', 'card_number', 'shaba_number', 'hotel', 'is_active')
-    autocomplete_fields = ['hotel']
-    
+    list_display = ('bank_name', 'card_number', 'is_active')
 
 @admin.register(PaymentConfirmation)
 class PaymentConfirmationAdmin(admin.ModelAdmin):
-    """Admin interface for reviewing user-submitted payment confirmations."""
-    list_display = (
-        'related_object_link', 
-        'offline_bank', 
-        'tracking_code', 
-        'payment_date', 
-        'payment_amount', 
-        'is_verified', 
-        'submission_date'
-    )
-    list_filter = ('is_verified', 'submission_date', 'offline_bank', 'content_type')
-    search_fields = ('tracking_code', 'object_id')
-    readonly_fields = ('content_object', 'tracking_code', 'payment_date', 'payment_amount', 'offline_bank', 'submission_date')
-    list_editable = ('is_verified',)
-
-    def related_object_link(self, obj):
-        """Creates a clickable link to the related object's admin change page."""
-        related_obj = obj.content_object
-        if related_obj:
-            try:
-                app_label = related_obj._meta.app_label
-                model_name = related_obj._meta.model_name
-                url = reverse(f'admin:{app_label}_{model_name}_change', args=[related_obj.pk])
-                return format_html('<a href="{}">{}</a>', url, related_obj)
-            except:
-                return str(related_obj)
-        return "No linked object"
-    related_object_link.short_description = 'موجودیت مرتبط'
+    list_display = ('tracking_code', 'payment_amount', 'is_verified')

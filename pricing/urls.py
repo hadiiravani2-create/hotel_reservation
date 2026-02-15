@@ -15,4 +15,7 @@ urlpatterns = [
     path('api/calculate-multi-price/', views.PriceQuoteMultiRoomAPIView.as_view(), name='price_quote_multi_api'),
     path('admin/calendar-pricing/', views.calendar_pricing_view, name='calendar_pricing'),
     path('api/room-calendar/<int:room_id>/', views.get_room_calendar, name='room_calendar_api'),
+    path('api/inventory/update-stock/', views.BulkUpdateStockAPIView.as_view(), name='bulk_update_stock'),
+    path('api/inventory/update-price/', views.BulkUpdatePriceAPIView.as_view(), name='bulk_update_price'),
+    path('api/inventory/calendar/', views.RoomCalendarRangeAPIView.as_view(), name='room_calendar_range'),
 ]

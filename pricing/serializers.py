@@ -46,3 +46,23 @@ class PriceQuoteOutputSerializer(serializers.Serializer):
     extra_adults_cost = serializers.DecimalField(max_digits=20, decimal_places=0)
     children_cost = serializers.DecimalField(max_digits=20, decimal_places=0)
     total_price = serializers.DecimalField(max_digits=20, decimal_places=0)
+
+class BulkUpdateStockSerializer(serializers.Serializer):
+    room = serializers.IntegerField()
+    start_date = serializers.DateField()
+    end_date = serializers.DateField()
+    quantity = serializers.IntegerField(min_value=0)
+
+class BulkUpdatePriceSerializer(serializers.Serializer):
+    room = serializers.IntegerField()
+    start_date = serializers.DateField()
+    end_date = serializers.DateField()
+    board_type = serializers.IntegerField()
+    price = serializers.DecimalField(max_digits=14, decimal_places=0)
+    extra_price = serializers.DecimalField(max_digits=14, decimal_places=0, required=False, default=0)
+    child_price = serializers.DecimalField(max_digits=14, decimal_places=0, required=False, default=0)
+
+class CalendarQuerySerializer(serializers.Serializer):
+    room = serializers.IntegerField()
+    start_date = serializers.DateField()
+    end_date = serializers.DateField()

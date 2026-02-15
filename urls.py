@@ -19,3 +19,4 @@ if settings.DEBUG:
     # If you also have media files:
     # urlpatterns += static(settings.MEDIA_URL, document_root=settings.MEDIA_ROOT)
 # ******* END FIX FOR SERVING STATIC/MEDIA FILES IN DEVELOPMENT *******
+

@@ -12,13 +12,23 @@ from .models import (
 from .serializers import (
     CitySerializer, HotelSerializer, AmenitySerializer,
     RoomTypeSerializer,
-    HotelCategorySerializer, BedTypeSerializer, RoomCategorySerializer,
+    HotelCategorySerializer, BedTypeSerializer, BoardTypeSerializer, RoomCategorySerializer,
     SuggestedHotelSerializer # Import the new serializer
 )
 from django.shortcuts import get_object_or_404
 from rest_framework.views import APIView
 
 # --- API Views required by hotels/urls.py ---
+
+class HotelDetailPKView(generics.RetrieveAPIView):
+    queryset = Hotel.objects.all()
+    serializer_class = HotelSerializer
+    lookup_field = 'pk'
+
+class BoardTypeListAPIView(generics.ListAPIView):
+    queryset = BoardType.objects.all()
+    serializer_class = BoardTypeSerializer
+                                                                                    
 
 class CityListAPIView(generics.ListAPIView):
     queryset = City.objects.all()

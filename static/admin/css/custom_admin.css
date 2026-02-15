@@ -1,0 +1,31 @@
+/* FILE: back/static/admin/css/custom_admin.css */
+
+/* 1. حذف دکمه‌های اضافی ذخیره در پایین صفحه */
+input[name="_addanother"],
+input[name="_continue"] {
+    display: none !important;
+}
+
+/* 2. حذف آیکون‌های (قلم، مثبت، چشم) از کنار فیلدهای رابطه‌ای */
+.related-widget-wrapper-link,
+.related-widget-wrapper-history-link {
+    display: none !important;
+}
+
+/* 3. استایل دکمه دانلود ووچر */
+.voucher-btn {
+    background-color: #007bff; /* آبی استاندارد */
+    color: white !important;
+    padding: 8px 15px;
+    border-radius: 4px;
+    text-decoration: none;
+    font-weight: normal;
+    display: inline-flex;
+    align-items: center;
+    gap: 5px;
+    transition: background 0.3s;
+}
+
+.voucher-btn:hover {
+    background-color: #0056b3;
+}

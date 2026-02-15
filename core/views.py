@@ -8,7 +8,6 @@ from rest_framework import status, generics, serializers, viewsets
 from rest_framework.authtoken.models import Token
 from django.shortcuts import get_object_or_404
 from rest_framework.permissions import IsAuthenticated
-from rest_framework.authentication import TokenAuthentication
 
 from .models import SiteSettings, Menu, CustomUser, Wallet, WalletTransaction, SpecialPeriod
 from .serializers import (
@@ -52,7 +51,6 @@ class UserLoginAPIView(APIView):
 
 
 class UserWalletDetailAPIView(APIView):
-    authentication_classes = [TokenAuthentication]
     permission_classes = [IsAuthenticated]
 
     def get(self, request):
@@ -71,7 +69,6 @@ class InitiateWalletDepositAPIView(APIView):
     API view for an authenticated user to initiate a wallet deposit.
     Creates a 'pending' transaction and returns its ID for the user to confirm payment.
     """
-    authentication_classes = [TokenAuthentication]
     permission_classes = [IsAuthenticated]
 
     def post(self, request):

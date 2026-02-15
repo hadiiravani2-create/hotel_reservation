@@ -30,7 +30,6 @@ from core.models import WalletTransaction,Wallet
 from .models import Booking, Guest, BookingRoom, OfflineBank, PaymentConfirmation 
 from .pdf_utils import generate_booking_confirmation_pdf
 from agencies.models import Agency, AgencyTransaction, AgencyUser
-from rest_framework.authentication import TokenAuthentication
 from rest_framework.permissions import AllowAny, IsAuthenticated 
 from django.utils.decorators import method_decorator
 from django.apps import apps
@@ -56,7 +55,6 @@ class CancelBookingAPIView(APIView):
     Handles the cancellation of a booking by an authenticated user.
     Calculates the cancellation fee, updates booking status, and processes the refund to the user's wallet.
     """
-    authentication_classes = [TokenAuthentication]
     permission_classes = [IsAuthenticated]
 
     @transaction.atomic # Ensure all database operations succeed or fail together
@@ -132,7 +130,6 @@ class PayWithWalletAPIView(APIView):
     """
     Handles payment for a booking using the user's wallet balance.
     """
-    authentication_classes = [TokenAuthentication]
     permission_classes = [IsAuthenticated]
 
     @transaction.atomic
@@ -167,7 +164,6 @@ class PayWithWalletAPIView(APIView):
 
 class CreateBookingAPIView(APIView):
     """API view for creating a booking, supporting both authenticated users and guests."""
-    authentication_classes = [TokenAuthentication]
     permission_classes = [AllowAny] 
 
     @transaction.atomic
@@ -442,7 +438,6 @@ class CreateBookingAPIView(APIView):
 
 class BookingDetailAPIView(APIView):
     """Retrieves details of a single booking by booking_code for payment/review page."""
-    authentication_classes = [TokenAuthentication]
     permission_classes = [AllowAny]
 
     def get(self, request, booking_code):
@@ -508,7 +503,6 @@ class BookingConfirmationPDFView(APIView):
     - GET: Authenticated users (owner or agency) can download.
     - POST: Guests can download by providing their ID code (National ID / Passport).
     """
-    authentication_classes = [TokenAuthentication]
     permission_classes = [AllowAny] # Permissions are checked manually inside methods
 
     def get(self, request, booking_code):
@@ -590,7 +584,6 @@ class OfflineBankListAPIView(generics.ListAPIView):
     - If hotel_id is NOT provided: Returns only general accounts (hotel=None).
     """
     serializer_class = OfflineBankSerializer
-    authentication_classes = [TokenAuthentication]
     permission_classes = [AllowAny]
 
     def get_queryset(self):
@@ -619,7 +612,6 @@ class PaymentConfirmationAPIView(APIView):
     API view for submitting payment confirmation details.
     Supports multiple payment submissions for a single booking (Reconciliation).
     """
-    authentication_classes = [TokenAuthentication]
     permission_classes = [AllowAny]
 
     @transaction.atomic
@@ -669,7 +661,6 @@ class PaymentConfirmationAPIView(APIView):
 class MyBookingsAPIView(generics.ListAPIView):
     """API view for authenticated users to list their bookings."""
     serializer_class = BookingListSerializer
-    authentication_classes = [TokenAuthentication]
     permission_classes = [IsAuthenticated]
 
     def get_queryset(self):
@@ -693,7 +684,6 @@ class MyBookingsAPIView(generics.ListAPIView):
 
 class BookingRequestAPIView(APIView):
     """API view to request cancellation or modification of a booking."""
-    authentication_classes = [TokenAuthentication]
     permission_classes = [IsAuthenticated]
 
     def post(self, request):
@@ -726,7 +716,6 @@ class BookingRequestAPIView(APIView):
 
 class InitiatePaymentAPIView(APIView):
     """API view to initiate payment for a pending booking."""
-    authentication_classes = [TokenAuthentication]
     permission_classes = [IsAuthenticated]
 
     def post(self, request):
@@ -745,7 +734,6 @@ class InitiatePaymentAPIView(APIView):
 
 class VerifyPaymentAPIView(APIView):
     """API view to verify payment status and confirm booking."""
-    authentication_classes = [TokenAuthentication]
     permission_classes = [IsAuthenticated]
 
     @transaction.atomic
@@ -785,7 +773,6 @@ class OperatorBookingConfirmationAPIView(APIView):
     API view for operators to list and manage bookings awaiting confirmation.
     Requires operator-level permissions.
     """
-    authentication_classes = [TokenAuthentication]
     permission_classes = [IsAuthenticated] # TODO: Replace with a custom operator permission
 
     def get(self, request):

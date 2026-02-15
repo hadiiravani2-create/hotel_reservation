@@ -1,7 +1,7 @@
 # pricing/views.py
 # version: 3.0.1
 # FIX: Added input sanitization to remove spaces and non-breaking spaces (\xa0) from numbers.
-
+from datetime import datetime, timedelta, date
 from django.shortcuts import render, redirect
 from django.contrib.admin.views.decorators import staff_member_required
 from django.contrib import messages
@@ -20,6 +20,7 @@ import jdatetime
 # Local imports
 from hotels.models import RoomType, Hotel, BoardType
 from .models import Price, Availability
+from .serializers import BulkUpdateStockSerializer, BulkUpdatePriceSerializer, CalendarQuerySerializer
 from .selectors import find_available_hotels, calculate_multi_booking_price
 from .serializers import (
     HotelSearchResultSerializer, 
@@ -387,3 +388,162 @@ def calendar_pricing_view(request):
     }
     
     return render(request, 'admin/pricing/calendar_view.html', context)
+
+class RoomCalendarRangeAPIView(APIView):
+    def get(self, request):
+        room_id = request.query_params.get('room')
+        start_date_str = request.query_params.get('start_date')
+        end_date_str = request.query_params.get('end_date')
+        board_type_id = request.query_params.get('board_type_id')
+
+        if not all([room_id, start_date_str, end_date_str]):
+            return Response({'error': 'Missing parameters'}, status=400)
+
+        try:
+            start_date = datetime.strptime(start_date_str, "%Y-%m-%d").date()
+            end_date = datetime.strptime(end_date_str, "%Y-%m-%d").date()
+            
+            # --- Availability ---
+            avail_qs = Availability.objects.filter(
+                room_type_id=room_id,
+                date__range=[start_date, end_date]
+            ).values('date', 'quantity')
+            
+            avail_map = {}
+            for item in avail_qs:
+                d_val = item['date']
+                if hasattr(d_val, 'togregorian'): d_val = d_val.togregorian()
+                avail_map[str(d_val)] = item['quantity']
+
+            # --- Price ---
+            price_qs = Price.objects.filter(
+                room_type_id=room_id,
+                date__range=[start_date, end_date]
+            )
+
+            if board_type_id and board_type_id not in ['null', 'undefined', '']:
+                price_qs = price_qs.filter(board_type_id=int(board_type_id))
+                # ADDED: دریافت فیلدهای نفر اضافه و کودک
+                prices = price_qs.values('date', 'price_per_night', 'extra_person_price', 'child_price')
+            else:
+                # در حالت نمایش کلی، میانگین یا مینیمم را می‌گیریم (برای سادگی فعلا مینیمم پایه)
+                prices = price_qs.values('date').annotate(
+                    price_per_night=Min('price_per_night'),
+                    extra_person_price=Min('extra_person_price'), # ADDED
+                    child_price=Min('child_price') # ADDED
+                )
+
+            price_map = {}
+            for item in prices:
+                d_val = item['date']
+                if hasattr(d_val, 'togregorian'): d_val = d_val.togregorian()
+                # ADDED: ذخیره تمام آبجکت قیمت به جای فقط یک عدد
+                price_map[str(d_val)] = {
+                    'base': item['price_per_night'],
+                    'extra': item.get('extra_person_price', 0),
+                    'child': item.get('child_price', 0)
+                }
+
+            # 3. ساخت خروجی نهایی
+            result = []
+            delta = (end_date - start_date).days
+            for i in range(delta + 1):
+                d = start_date + timedelta(days=i)
+                d_str = str(d)
+                
+                price_data = price_map.get(d_str, None)
+
+                result.append({
+                    'date': d_str,
+                    'stock': avail_map.get(d_str, 0),
+                    # ارسال جزئیات کامل یا نال
+                    'price': price_data['base'] if price_data else None,
+                    'extra_price': price_data['extra'] if price_data else None,
+                    'child_price': price_data['child'] if price_data else None,
+                })
+
+            return Response(result)
+
+        except Exception as e:
+            print(f"Calendar Error: {e}")
+            import traceback
+            traceback.print_exc()
+            return Response({'error': str(e)}, status=500)
+
+# ----------------------------------------------------------------
+# 2. API آپدیت موجودی (بازگردانی شده)
+# ----------------------------------------------------------------
+class BulkUpdateStockAPIView(APIView):
+    def post(self, request):
+        try:
+            room_id = request.data.get('room')
+            start_date = request.data.get('start_date')
+            end_date = request.data.get('end_date')
+            quantity = request.data.get('quantity')
+
+            if not all([room_id, start_date, end_date, quantity is not None]):
+                return Response({'error': 'Incomplete data'}, status=400)
+
+            start = datetime.strptime(start_date, "%Y-%m-%d").date()
+            end = datetime.strptime(end_date, "%Y-%m-%d").date()
+            delta = (end - start).days
+
+            with transaction.atomic():
+                for i in range(delta + 1):
+                    current_date = start + timedelta(days=i)
+                    Availability.objects.update_or_create(
+                        room_type_id=room_id,
+                        date=current_date,
+                        defaults={'quantity': quantity}
+                    )
+            
+            return Response({'message': 'Inventory updated successfully'})
+        except Exception as e:
+            return Response({'error': str(e)}, status=500)
+
+# ----------------------------------------------------------------
+# 3. API آپدیت قیمت (بازگردانی شده - مورد نیاز برای رفع خطا)
+# ----------------------------------------------------------------
+class BulkUpdatePriceAPIView(APIView):
+    def post(self, request):
+        try:
+            room_id = request.data.get('room')
+            start_date = request.data.get('start_date')
+            end_date = request.data.get('end_date')
+            board_type = request.data.get('board_type')
+            price = request.data.get('price')
+            
+            # فیلدهای اختیاری
+            extra_price = request.data.get('extra_price', 0)
+            child_price = request.data.get('child_price', 0)
+
+            if not all([room_id, start_date, end_date, board_type, price]):
+                return Response({'error': 'Incomplete data'}, status=400)
+
+            start = datetime.strptime(start_date, "%Y-%m-%d").date()
+            end = datetime.strptime(end_date, "%Y-%m-%d").date()
+            delta = (end - start).days
+
+            with transaction.atomic():
+                for i in range(delta + 1):
+                    current_date = start + timedelta(days=i)
+                    
+                    # تبدیل board_type به عدد صحیح برای جلوگیری از خطا
+                    board_id = int(board_type)
+                    
+                    Price.objects.update_or_create(
+                        room_type_id=room_id,
+                        date=current_date,
+                        board_type_id=board_id,
+                        defaults={
+                            'price_per_night': price,
+                            'extra_person_price': extra_price,
+                            'child_price': child_price,
+                            'is_active': True
+                        }
+                    )
+            
+            return Response({'message': 'Prices updated successfully'})
+        except Exception as e:
+            print(f"Price Update Error: {e}")
+            return Response({'error': str(e)}, status=500)

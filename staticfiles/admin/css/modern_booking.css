@@ -1,0 +1,71 @@
+/* مخفی کردن دکمه‌های گیج‌کننده پایین صفحه */
+.submit-row input[name="_addanother"],
+.submit-row input[name="_continue"] {
+    display: none !important;
+}
+
+/* استایل هدر اختصاصی رزرو */
+.booking-header-card {
+    background: linear-gradient(135deg, #1e3c72 0%, #2a5298 100%);
+    color: white;
+    padding: 20px;
+    border-radius: 8px;
+    box-shadow: 0 4px 6px rgba(0,0,0,0.1);
+    margin-bottom: 25px;
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+}
+
+.booking-info h2 {
+    margin: 0;
+    color: white !important;
+    font-size: 24px;
+}
+
+.booking-info p {
+    margin: 5px 0 0;
+    opacity: 0.9;
+    font-size: 14px;
+}
+
+.action-buttons {
+    display: flex;
+    gap: 10px;
+}
+
+.btn-voucher {
+    background-color: #00d2d3;
+    color: #fff !important;
+    padding: 10px 20px;
+    border-radius: 50px;
+    text-decoration: none;
+    font-weight: bold;
+    box-shadow: 0 2px 5px rgba(0,0,0,0.2);
+    transition: transform 0.2s;
+    display: flex;
+    align-items: center;
+    gap: 5px;
+}
+
+.btn-voucher:hover {
+    transform: translateY(-2px);
+    background-color: #00b8b9;
+}
+
+/* استایل بج‌های وضعیت */
+.status-pill {
+    padding: 5px 12px;
+    border-radius: 15px;
+    font-size: 12px;
+    font-weight: bold;
+    text-transform: uppercase;
+}
+.status-confirmed { background-color: #2ecc71; color: white; }
+.status-pending { background-color: #f1c40f; color: black; }
+.status-cancelled { background-color: #e74c3c; color: white; }
+.status-awaiting { background-color: #3498db; color: white; }
+
+/* تمیز کردن جداول */
+td.field-verify_button { text-align: center; }
+.inline-group h2 { background-color: #f8f9fa !important; color: #333 !important; border-bottom: 2px solid #ddd; }

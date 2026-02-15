@@ -61,6 +61,7 @@ INSTALLED_APPS = [
     'agencies.apps.AgenciesConfig',
     'reservations.apps.ReservationsConfig',
     'rest_framework.authtoken',
+    'rest_framework_simplejwt',
     'notifications.apps.NotificationsConfig',
     'services',
     'cancellations',
@@ -232,4 +233,27 @@ JAZZMIN_UI_TWEAKS = {
     # "theme": "darkly", # یا تم تاریک
 }
 
+REST_FRAMEWORK = {
+    'DEFAULT_AUTHENTICATION_CLASSES': (
+        'rest_framework_simplejwt.authentication.JWTAuthentication',
+        'rest_framework.authentication.SessionAuthentication',
+    ),
+    'DEFAULT_PERMISSION_CLASSES': [
+        # تغییر حالت پیش‌فرض به "باز بودن برای همه"
+        # امنیت را در ویوهای خاص (مثل پروفایل یا پرداخت) به صورت دستی اعمال می‌کنیم
+        'rest_framework.permissions.AllowAny',
+    ],
+}
 
+# تنظیمات اختصاصی JWT (این بخش را به انتهای فایل اضافه کنید)
+from datetime import timedelta
+
+SIMPLE_JWT = {
+    'ACCESS_TOKEN_LIFETIME': timedelta(minutes=60),  # عمر توکن دسترسی (امنیت بالا)
+    'REFRESH_TOKEN_LIFETIME': timedelta(days=1),     # عمر توکن رفرش (راحتی کاربر)
+    'ROTATE_REFRESH_TOKENS': True,                   # با هر بار رفرش، توکن رفرش جدید صادر شود (امنیت عالی)
+    'BLACKLIST_AFTER_ROTATION': True,                # توکن قبلی بلافاصله باطل شود
+    'UPDATE_LAST_LOGIN': True,                       # تاریخ آخرین ورود کاربر آپدیت شود
+
+    'AUTH_HEADER_TYPES': ('Bearer',),                # هدر به صورت: Bearer <token>
+}
